@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Nexus Who - Eligibility Screen</title>
+  <meta name="robots" content="noindex, nofollow">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background-color: #06010a;
+      background-image: radial-gradient(ellipse at 50% 0%, #10031c 0%, #06010a 70%);
+      color: #FFFFFF;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .progress-bar-fill {
+      background: linear-gradient(to right, #F97316, #DC2626);
+      transition: width 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+    .radio-label:has(input:checked) {
+      background-color: rgba(124, 58, 237, 0.15);
+      border-color: rgba(124, 58, 237, 0.5);
+    }
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "qrcode.react": "https://aistudiocdn.com/qrcode.react@^3.1.0"
+  }
+}
+</script>
+</head>
+<body class="antialiased">
+  <div id="root"></div>
+  <script type="module" src="/nexus-who.tsx"></script>
+</body>
+</html>
