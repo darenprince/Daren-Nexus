@@ -17,11 +17,12 @@ export interface Message {
   timestamp: string;
   audioBuffer?: AudioBuffer; // For TTS playback
   attachments?: Attachment[];
+  groundingMetadata?: any; // To store citations
 }
 
 export interface User {
   hash: string;
-  username: string;
+  email: string;
   name?: string;
   isGuest: boolean;
   isSpecialUser?: boolean;

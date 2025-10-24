@@ -88,7 +88,7 @@ export const NexusAndChillModal: React.FC<NexusAndChillModalProps> = ({ isOpen, 
 NEXUS & CHILL AUDIT REPORT
 ----------------------------------
 Respondent ID: ${currentUser.hash}
-Username: ${currentUser.username}
+Email: ${currentUser.email}
 Timestamp: ${new Date().toISOString()}
 ----------------------------------
 ANSWERS:
@@ -113,7 +113,7 @@ ${calcResult.safetyFlags.join('\n') || 'None'}
 RETENTION NOTE: Raw data purged in 30 days.
         `;
         console.log("--- AUDIT FOR DAREN (SIMULATED EMAIL) ---", audit);
-        const mailtoLink = `mailto:daren.prince@gmail.com?subject=Nexus & Chill Audit: ${currentUser.username}&body=${encodeURIComponent(audit)}`;
+        const mailtoLink = `mailto:daren.prince@gmail.com?subject=Nexus & Chill Audit: ${currentUser.email}&body=${encodeURIComponent(audit)}`;
         // In a real app, you'd post this to a server. Here, we can open a mailto link or just log it.
         // window.open(mailtoLink);
     };
@@ -170,7 +170,7 @@ RETENTION NOTE: Raw data purged in 30 days.
                     <div className="text-center w-full">
                         <h2 className={`text-3xl font-black mb-4 ${result?.finalStatus === 'PASS' ? 'text-green-400' : 'text-green-400'}`}>{title} — eligibility confirmed.</h2>
                         <div className="bg-black/20 border border-white/10 rounded-lg p-6">
-                             <p className="text-lg text-gray-300">{currentUser.name || currentUser.username}</p>
+                             <p className="text-lg text-gray-300">{currentUser.name || currentUser.email}</p>
                              <p className="text-sm text-gray-500 mb-4">{new Date().toLocaleString()}</p>
                              <p className="text-xl font-medium text-white italic mb-6">"{result?.narrative}"</p>
                              <p className="text-lg font-bold text-orange-400">Screenshot this and send to Daren.</p>

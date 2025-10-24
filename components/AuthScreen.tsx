@@ -4,17 +4,21 @@ import { Embers } from './Embers';
 import { StarryBackground } from './StarryBackground';
 
 interface AuthScreenProps {
-  onLogin: (username: string, password: string, rememberMe: boolean) => Promise<void>;
+  onLogin: (email: string, password: string, rememberMe: boolean) => Promise<void>;
   onGuest: () => Promise<void>;
+  onForgotPassword: () => void;
 }
 
-export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onGuest }) => {
-  const [username, setUsername] = useState('');
+export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onGuest, onForgotPassword }) => {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoginLoading, setIsLoginLoading] = useState(false);
+  const [isGuestLoading, setIsGuestLoading] = useState(false);
   const [error, setError] = useState('');
   const [startLogoAnimation, setStartLogoAnimation] = useState(false);
+  const [isEmailFocused, setIsEmailFocused] = useState(false);
+  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -23,45 +27,48 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onGuest }) => {
     return () => clearTimeout(timer);
   }, []);
 
-  const isButtonDisabled = isLoading || !username.trim() || !password;
+  const isAnyLoading = isLoginLoading || isGuestLoading;
+  const isLoginButtonDisabled = isAnyLoading || !email.trim() || !password;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isButtonDisabled) {
-      setIsLoading(true);
+    if (!isLoginButtonDisabled) {
+      setIsLoginLoading(true);
       setError('');
-      try {
-        await onLogin(username.trim(), password, rememberMe);
-      } catch (err) {
-        if (err instanceof Error) {
-            setError(err.message);
-        } else {
-            setError('An unknown error occurred.');
-        }
-        setIsLoading(false);
-      }
+      setTimeout(() => {
+        onLogin(email.trim(), password, rememberMe)
+          .catch((err) => {
+            if (err instanceof Error) {
+                setError(err.message);
+            } else {
+                setError('An unknown error occurred.');
+            }
+            setIsLoginLoading(false);
+          });
+      }, 2000);
     }
   };
 
   const handleGuest = async () => {
-    setIsLoading(true);
+    setIsGuestLoading(true);
     setError('');
-    try {
-      await onGuest();
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('An unknown error occurred while starting a guest session.');
-      }
-      setIsLoading(false);
-    }
+    setTimeout(() => {
+        onGuest()
+          .catch((err) => {
+            if (err instanceof Error) {
+              setError(err.message);
+            } else {
+              setError('An unknown error occurred while starting a guest session.');
+            }
+            setIsGuestLoading(false);
+          });
+    }, 2000);
   };
 
   return (
-    <div className="min-h-full w-full max-w-md mx-auto flex flex-col items-center justify-center p-10 text-center animate-fade-in">
+    <div className="min-h-full w-full max-w-md mx-auto flex flex-col items-center justify-center p-10 text-center">
       <StarryBackground />
-      <div className={`relative w-48 h-24 logo-container -translate-x-1 ${startLogoAnimation ? 'animate' : ''}`}>
+      <div className={`relative w-48 h-24 logo-container -translate-x-3 ${startLogoAnimation ? 'animate' : ''}`}>
         <div className="w-full h-full animate-fade-in" style={{ animationDelay: '200ms', opacity: 0, animationFillMode: 'forwards' }}>
             <div className="logo-glow w-full h-full">
                 <LogoIcon />
@@ -71,33 +78,41 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onGuest }) => {
       </div>
 
       <p className="text-xl text-white mt-6">
-         No filter. <strong className="font-bold bg-gradient-to-r from-orange-500 to-red-600 bg-clip-text text-transparent">No bullshit</strong>
+         <span className="text-gray-400">No filter.</span> <strong className="font-bold bg-gradient-to-r from-orange-500 to-red-600 bg-clip-text text-transparent">No bullshit.</strong>
       </p>
 
       <form onSubmit={handleSubmit} className="w-full mt-12">
         <div className="space-y-4">
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter your username"
-              disabled={isLoading}
-              autoComplete="username"
-              className="w-full bg-[#0A0A0B] text-white placeholder:text-gray-500 border-2 border-white/10 focus:border-nexusPurple-500 focus:ring-0 rounded-full px-5 py-3 text-lg transition-colors"
-            />
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password"
-              disabled={isLoading}
-              autoComplete="current-password"
-              className="w-full bg-[#0A0A0B] text-white placeholder:text-gray-500 border-2 border-white/10 focus:border-nexusPurple-500 focus:ring-0 rounded-full px-5 py-3 text-lg transition-colors"
-            />
+            <div className={`relative rounded-full ${isEmailFocused ? 'input-chase-glow' : ''}`}>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onFocus={() => setIsEmailFocused(true)}
+                  onBlur={() => setIsEmailFocused(false)}
+                  placeholder="Enter your email"
+                  disabled={isAnyLoading}
+                  autoComplete="email"
+                  className="relative z-10 w-full bg-[#0A0A0B] text-white placeholder:text-gray-500 border-2 border-white/10 focus:border-transparent focus:ring-0 rounded-full px-5 py-3 text-lg transition-colors"
+                />
+            </div>
+            <div className={`relative rounded-full ${isPasswordFocused ? 'input-chase-glow' : ''}`}>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onFocus={() => setIsPasswordFocused(true)}
+                  onBlur={() => setIsPasswordFocused(false)}
+                  placeholder="Enter password"
+                  disabled={isAnyLoading}
+                  autoComplete="current-password"
+                  className="relative z-10 w-full bg-[#0A0A0B] text-white placeholder:text-gray-500 border-2 border-white/10 focus:border-transparent focus:ring-0 rounded-full px-5 py-3 text-lg transition-colors"
+                />
+            </div>
         </div>
 
-        <div className="mt-4 ml-2">
-            <label className="flex items-center gap-2 text-gray-400 cursor-pointer w-max">
+        <div className="mt-4 px-2 flex justify-between items-center">
+            <label className="flex items-center gap-2 text-gray-400 cursor-pointer">
                 <input
                     type="checkbox"
                     checked={rememberMe}
@@ -109,19 +124,36 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onGuest }) => {
                 </div>
                 <span className="text-sm">Save login info</span>
             </label>
+            <button
+              type="button"
+              onClick={onForgotPassword}
+              className="text-sm text-gray-500 hover:text-nexusPurple-400 transition-colors"
+            >
+              Forgot Password?
+            </button>
         </div>
 
         {error && <p className="text-red-400 mt-3 text-sm text-left">{error}</p>}
         <button
           type="submit"
-          disabled={isButtonDisabled}
-          className={`w-full text-white font-bold py-3 px-6 rounded-full transition-all duration-300 mt-4
-            ${isButtonDisabled
-              ? 'bg-nexusPurple-800 opacity-70 cursor-not-allowed'
-              : 'bg-gradient-to-r from-orange-500 to-red-600 hover:opacity-90'
-            }`}
+          disabled={isLoginButtonDisabled}
+          className={`auth-plug-in-button btn-radiate-glow w-full text-white font-bold py-3 px-6 rounded-full transition-all duration-300 mt-4 relative overflow-hidden
+            disabled:cursor-not-allowed disabled:filter disabled:saturate-50 disabled:brightness-75
+            ${!isLoginButtonDisabled ? 'bg-gradient-to-r from-orange-500 to-red-600 hover:opacity-90' : 'bg-nexusPurple-800' }
+            ${isLoginLoading ? 'is-loading bg-gradient-to-r from-orange-600 to-red-700' : ''}
+          `}
         >
-          {isLoading ? 'Syncing...' : 'Plug In'}
+          <span className="relative z-10 flex items-center justify-center h-6">
+            {isLoginLoading ? (
+                <div className="flex space-x-1.5 justify-center items-center">
+                    <div className="h-2 w-2 animate-dot-bounce rounded-full bg-white" style={{ animationDelay: '0s' }}></div>
+                    <div className="h-2 w-2 animate-dot-bounce rounded-full bg-white" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="h-2 w-2 animate-dot-bounce rounded-full bg-white" style={{ animationDelay: '0.4s' }}></div>
+                </div>
+            ) : (
+                <span>Plug In <span className="font-normal opacity-70">or</span> Sign Up</span>
+            )}
+          </span>
         </button>
       </form>
 
@@ -133,10 +165,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onGuest }) => {
 
       <button
         onClick={handleGuest}
-        disabled={isLoading}
-        className="w-full bg-transparent border border-white/20 text-white font-bold py-3 px-6 rounded-full hover:bg-white/10 transition-colors duration-200 disabled:opacity-50"
+        disabled={isAnyLoading}
+        className="btn-radiate-glow w-full bg-transparent border border-white/20 text-gray-400 font-bold py-3 px-6 rounded-full hover:bg-white/10 hover:text-white transition-colors duration-200 disabled:opacity-50"
       >
-        Go Off the Record
+        <span className="relative z-10 flex items-center justify-center h-6">
+            {isGuestLoading ? (
+                <div className="flex space-x-1.5 justify-center items-center">
+                    <div className="h-2 w-2 animate-dot-bounce rounded-full bg-white" style={{ animationDelay: '0s' }}></div>
+                    <div className="h-2 w-2 animate-dot-bounce rounded-full bg-white" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="h-2 w-2 animate-dot-bounce rounded-full bg-white" style={{ animationDelay: '0.4s' }}></div>
+                </div>
+            ) : <span className="text-gray-500">Go Off the Record</span>}
+        </span>
       </button>
     </div>
   );

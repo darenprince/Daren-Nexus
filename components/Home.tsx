@@ -8,6 +8,8 @@ import { LogoIcon } from './LogoIcon';
 interface HomeProps {
   onSelectMode: (mode: string) => void;
   onAnimationComplete: () => void;
+  currentMode: string;
+  selectedModeForAnimation: string | null;
 }
 
 const H1_FULL_TEXT = "Sup? I'm Daren";
@@ -15,30 +17,31 @@ const P1_FULL_TEXT = "Ask me anything";
 const P2_FULL_TEXT = "Let's get into it. What's the vibe?";
 const TYPING_SPEED = 50; // ms per character
 
-export const Home: React.FC<HomeProps> = ({ onSelectMode, onAnimationComplete }) => {
-    const [showIntroAnimation, setShowIntroAnimation] = useState(false);
-    const [isFlameVisible, setIsFlameVisible] = useState(false);
-    const [igniteFlame, setIgniteFlame] = useState(false);
-    const [typingStep, setTypingStep] = useState(0); // 0: idle, 1: h1, 2: p1, 3: p2, 4: done
-    const [h1Text, setH1Text] = useState('');
-    const [p1Text, setP1Text] = useState('');
-    const [p2Text, setP2Text] = useState('');
+type IntroStep = 'loading' | 'content' | 'finished';
 
+export const Home: React.FC<HomeProps> = ({ onSelectMode, onAnimationComplete, currentMode, selectedModeForAnimation }) => {
+    const [introStep, setIntroStep] = useState<IntroStep>(() => {
+        return sessionStorage.getItem('homeAnimationPlayed') ? 'finished' : 'loading';
+    });
+    
+    const [isFlameVisible, setIsFlameVisible] = useState(introStep === 'finished');
+    const [igniteFlame, setIgniteFlame] = useState(false);
+    const [typingStep, setTypingStep] = useState(introStep === 'finished' ? 4 : 0);
+    const [h1Text, setH1Text] = useState(introStep === 'finished' ? H1_FULL_TEXT : '');
+    const [p1Text, setP1Text] = useState(introStep === 'finished' ? P1_FULL_TEXT : '');
+    const [p2Text, setP2Text] = useState(introStep === 'finished' ? P2_FULL_TEXT : '');
 
     useEffect(() => {
-        const animationPlayed = sessionStorage.getItem('homeAnimationPlayed');
-        if (!animationPlayed) {
-            setShowIntroAnimation(true);
+        if (introStep === 'loading') {
             sessionStorage.setItem('homeAnimationPlayed', 'true');
-        } else {
+        } else if (introStep === 'content') {
             setIsFlameVisible(true);
-            // Skip typing animation if intro was already played
-            setH1Text(H1_FULL_TEXT);
-            setP1Text(P1_FULL_TEXT);
-            setP2Text(P2_FULL_TEXT);
-            setTypingStep(4); // Mark as done
+            setIgniteFlame(true);
+            setTimeout(() => {
+                setTypingStep(1);
+            }, 700); // Start typing after flame ignites
         }
-    }, []);
+    }, [introStep]);
 
     useEffect(() => {
         if (igniteFlame) {
@@ -49,14 +52,8 @@ export const Home: React.FC<HomeProps> = ({ onSelectMode, onAnimationComplete })
         }
     }, [igniteFlame]);
 
-    const handleAnimationComplete = () => {
-        setShowIntroAnimation(false);
-        setIsFlameVisible(true);
-        setIgniteFlame(true);
-        // Start typing after flame ignites
-        setTimeout(() => {
-            setTypingStep(1);
-        }, 700);
+    const handleLoadingComplete = () => {
+        setIntroStep('content');
     };
     
     useEffect(() => {
@@ -98,12 +95,33 @@ export const Home: React.FC<HomeProps> = ({ onSelectMode, onAnimationComplete })
         }
     }, [typingStep, onAnimationComplete]);
 
+    if (introStep === 'loading') {
+        return (
+            <div className="flex-1 flex flex-col items-center justify-between p-4 text-center animate-fade-in relative">
+                <div className="mb-8">
+                    <LoadingAnimation onComplete={handleLoadingComplete} />
+                    {/* Placeholder for layout consistency */}
+                    <div className="relative w-56 h-56 mb-6 opacity-0"><NexusOrb /></div>
+                    <div className="opacity-0">
+                        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight h-[1.2em]">{H1_FULL_TEXT}</h1>
+                        <p className="text-xl sm:text-2xl font-semibold mt-4 h-[1.2em]">{P1_FULL_TEXT}</p>
+                        <p className="text-base sm:text-lg mt-2 max-w-md h-[1.5em]">{P2_FULL_TEXT}</p>
+                    </div>
+                </div>
+                <div className="w-full max-w-md opacity-0">
+                    <ModeTiles onSelectMode={onSelectMode} currentMode={currentMode} selectedModeForAnimation={selectedModeForAnimation} />
+                </div>
+            </div>
+        );
+    }
+    
+    // For 'content' and 'finished' steps
+    const contentAnimationClass = introStep === 'content' ? 'animate-slide-up-fade-in' : 'animate-fade-in';
+    const orbAnimationClass = introStep === 'finished' ? 'animate-breathing' : '';
 
     return (
-        <div className="flex-1 flex flex-col items-center justify-between p-4 text-center animate-fade-in relative">
+        <div className={`flex-1 flex flex-col items-center justify-between p-4 text-center relative ${contentAnimationClass}`}>
             <div className="mb-8">
-                {showIntroAnimation && <LoadingAnimation onComplete={handleAnimationComplete} />}
-                
                 <div className="relative w-56 h-56 mb-6">
                     {isFlameVisible && (
                         <div className="absolute inset-0 flex items-center justify-center opacity-[0.12] pointer-events-none">
@@ -116,7 +134,7 @@ export const Home: React.FC<HomeProps> = ({ onSelectMode, onAnimationComplete })
                         className={`w-full h-full transition-opacity duration-300 relative
                             ${isFlameVisible ? 'opacity-100' : 'opacity-0'}
                             ${igniteFlame ? 'animate-flame-ignite-flash' : ''}
-                            ${!showIntroAnimation && !igniteFlame ? 'animate-breathing' : ''}`
+                            ${orbAnimationClass}`
                         }
                     >
                         <NexusOrb />
@@ -142,7 +160,7 @@ export const Home: React.FC<HomeProps> = ({ onSelectMode, onAnimationComplete })
             </div>
 
             <div className={`w-full max-w-md ${typingStep === 4 ? 'animate-slide-up-fade-in' : 'opacity-0'}`}>
-                <ModeTiles onSelectMode={onSelectMode} />
+                <ModeTiles onSelectMode={onSelectMode} currentMode={currentMode} selectedModeForAnimation={selectedModeForAnimation} />
             </div>
         </div>
     );

@@ -5,9 +5,10 @@ interface ModeSelectionModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSelectMode: (mode: string) => void;
+    currentMode: string;
 }
 
-export const ModeSelectionModal: React.FC<ModeSelectionModalProps> = ({ isOpen, onClose, onSelectMode }) => {
+export const ModeSelectionModal: React.FC<ModeSelectionModalProps> = ({ isOpen, onClose, onSelectMode, currentMode }) => {
     if (!isOpen) return null;
 
     return (
@@ -28,7 +29,7 @@ export const ModeSelectionModal: React.FC<ModeSelectionModalProps> = ({ isOpen, 
                     </div>
                 </div>
                 <div className="flex-1 overflow-y-auto px-6 pb-6">
-                    <ModeTiles onSelectMode={onSelectMode} />
+                    <ModeTiles onSelectMode={onSelectMode} currentMode={currentMode} />
                 </div>
             </div>
         </div>

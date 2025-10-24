@@ -224,7 +224,7 @@ export const VoiceInputOverlay: React.FC<VoiceInputOverlayProps> = ({ onClose, o
                 <NexusOrb mood="listening" />
             </div>
         </button>
-        <p className="text-white/60 mt-4 text-lg">Tap orb to finish</p>
+        <p className="text-white/60 mt-4 text-lg">Tap flame to finish</p>
       </div>
     </div>
   );

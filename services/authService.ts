@@ -47,15 +47,15 @@ const getCurrentUserHash = (): string | null => {
     return localStorage.getItem(CURRENT_USER_HASH_KEY) || sessionStorage.getItem(CURRENT_USER_HASH_KEY);
 };
 
-export const loginOrSignup = (username: string, password: string, rememberMe: boolean): User => {
-    const sanitizedUsername = username.trim().toLowerCase();
-    if (!sanitizedUsername || !password) {
-        throw new Error("Username and password cannot be empty.");
+export const loginOrSignup = (email: string, password: string, rememberMe: boolean): User => {
+    const sanitizedEmail = email.trim().toLowerCase();
+    if (!sanitizedEmail || !password) {
+        throw new Error("Email and password cannot be empty.");
     }
 
-    const isSpecial = sanitizedUsername === 'testfriend22';
+    const isSpecial = sanitizedEmail === 'testfriend22@daren.prince';
     const users = getUsers();
-    const existingUser = users.find(u => u.username === sanitizedUsername && !u.isGuest);
+    const existingUser = users.find(u => u.email === sanitizedEmail && !u.isGuest);
 
     if (existingUser) {
         // Login attempt
@@ -72,7 +72,7 @@ export const loginOrSignup = (username: string, password: string, rememberMe: bo
         const passwordHash = hashPassword(password);
         const newUser: StoredUser = {
             hash: `nexus-user-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-            username: sanitizedUsername,
+            email: sanitizedEmail,
             passwordHash: passwordHash,
             isGuest: false,
             isSpecialUser: isSpecial,
@@ -89,7 +89,7 @@ export const loginOrSignup = (username: string, password: string, rememberMe: bo
 export const continueAsGuest = (): User => {
     const guestUser: User = {
         hash: `nexus-guest-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-        username: 'guest',
+        email: 'guest',
         isGuest: true,
         isSpecialUser: false, // Guests cannot be special users
     };
@@ -106,7 +106,7 @@ export const getCurrentUser = (): User | null => {
     if (userHash.startsWith('nexus-guest-')) {
         return {
             hash: userHash,
-            username: 'guest',
+            email: 'guest',
             isGuest: true,
         };
     }
@@ -118,7 +118,7 @@ export const getCurrentUser = (): User | null => {
         // Ensure the password hash is never returned
         const { passwordHash: _, ...safeUser } = user;
         // Re-check if this user is the special one on session load
-        safeUser.isSpecialUser = safeUser.username === 'testfriend22';
+        safeUser.isSpecialUser = safeUser.email === 'testfriend22@daren.prince';
         return safeUser;
     }
     
