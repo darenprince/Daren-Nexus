@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
 import { GoogleGenAI, Modality } from "@google/genai";
 import 'dotenv/config';
 import { modeDirectives, initialSystemInstruction } from './persona';
@@ -16,6 +17,8 @@ if (!process.env.API_KEY) {
     throw new Error("API_KEY environment variable is not set.");
 }
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+app.use(express.static('public'));
 
 // --- API Endpoints ---
 
@@ -86,7 +89,7 @@ app.post('/api/chat', async (req, res) => {
         });
 
         res.json({ 
-            text: response.text,
+            text: response.text ?? '',
             groundingMetadata: response.candidates?.[0]?.groundingMetadata,
         });
     } catch (error: any) {
@@ -163,7 +166,7 @@ app.post('/api/classify', async (req, res) => {
             model: 'gemini-2.5-flash',
             contents: prompt,
         });
-        const classification = response.text.trim().toLowerCase();
+        const classification = response.text ? response.text.trim().toLowerCase() : 'neutral';
         
         if (['sexual', 'violent', 'emotional', 'neutral'].includes(classification)) {
             res.json({ classification });
@@ -175,6 +178,10 @@ app.post('/api/classify', async (req, res) => {
         console.error("Error in /api/classify:", error);
         res.status(500).json({ error: "Failed to classify text." });
     }
+});
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public', 'index.html'));
 });
 
 // --- Server Startup ---
