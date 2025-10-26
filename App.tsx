@@ -19,7 +19,7 @@ import { NexusAndChillModal } from './components/NexusAndChillModal';
 import { ForgotPasswordModal } from './components/ForgotPasswordModal';
 import { ProfileModal } from './components/ProfileModal';
 
-import { onAuthChange, continueAsGuest, logout, saveCurrentUserName, signInWithEmail, signUpWithEmail } from './services/authService';
+import { onAuthChange, continueAsGuest, logout, saveCurrentUserName, signInWithEmail, signUpWithEmail, setUpRecaptcha, signInWithPhone, verifyPhoneNumber } from './services/authService';
 import { archiveCurrentSession } from './services/chatHistoryService';
 import { sendMessage } from './services/dialogflowService';
 import { generateSpeech, classifyTextIntent } from './services/geminiService';
@@ -40,6 +40,7 @@ import type { Message, User, Attachment } from './types';
 import { Sender } from './types';
 
 import { AudioPlayerProvider } from './contexts/AudioPlayerContext';
+import type { RecaptchaVerifier, ConfirmationResult } from 'firebase/auth';
 
 /**
  * The main application component. Manages all application state, including authentication,
@@ -96,6 +97,8 @@ const App: React.FC = () => {
     const [liveSystemInstruction, setLiveSystemInstruction] = useState(initialSystemInstruction);
 
     // --- Effects ---
+
+
     
     const prevThemeRef = useRef(theme);
     /**
@@ -237,6 +240,18 @@ const App: React.FC = () => {
     const handleGuest = async () => {
         await continueAsGuest();
     };
+
+    const [authStatus, setAuthStatus] = useState<'loading' | 'authenticated' | 'unauthenticated'>('loading');
+
+    const handleSignInWithPhone = async (phoneNumber: string, appVerifier: RecaptchaVerifier) => {
+        return await signInWithPhone(phoneNumber, appVerifier);
+    };
+
+    const handleVerifyPhoneNumber = async (confirmationResult: ConfirmationResult, code: string) => {
+        await verifyPhoneNumber(confirmationResult, code);
+    };
+
+
     
     const handleGoToAuth = async () => {
         setIsMenuOpen(false);
@@ -511,7 +526,7 @@ const App: React.FC = () => {
         return (
             <>
                 <div className="w-full min-h-full flex items-center justify-center animate-auth-emerge opacity-0">
-                    <AuthScreen onLogin={handleLogin} onGuest={handleGuest} onForgotPassword={() => setIsForgotPasswordOpen(true)} />
+                    <AuthScreen onLogin={handleLogin} onGuest={handleGuest} onForgotPassword={() => setIsForgotPasswordOpen(true)} onSignInWithPhone={handleSignInWithPhone} onVerifyPhoneNumber={handleVerifyPhoneNumber} />
                 </div>
                 <ForgotPasswordModal isOpen={isForgotPasswordOpen} onClose={() => setIsForgotPasswordOpen(false)} />
             </>
