@@ -1,3 +1,4 @@
+import { getAuthHeaders } from './api';
 import type { Message, User } from '../types';
 import { Sender } from '../types';
 
@@ -60,10 +61,12 @@ export const sendMessage = async (
     }));
 
     try {
+        const authHeaders = await getAuthHeaders();
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                ...authHeaders,
             },
             body: JSON.stringify({
                 message,

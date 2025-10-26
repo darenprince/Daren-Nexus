@@ -19,7 +19,7 @@ import { NexusAndChillModal } from './components/NexusAndChillModal';
 import { ForgotPasswordModal } from './components/ForgotPasswordModal';
 import { ProfileModal } from './components/ProfileModal';
 
-import { loginOrSignup, continueAsGuest, getCurrentUser, logout, saveCurrentUserName } from './services/authService';
+import { onAuthChange, continueAsGuest, logout, saveCurrentUserName, signInWithEmail, signUpWithEmail } from './services/authService';
 import { archiveCurrentSession } from './services/chatHistoryService';
 import { sendMessage } from './services/dialogflowService';
 import { generateSpeech, classifyTextIntent } from './services/geminiService';
@@ -162,13 +162,16 @@ const App: React.FC = () => {
      * Sets the authentication status accordingly.
      */
     useEffect(() => {
-        const user = getCurrentUser();
-        if (user) {
-            setCurrentUser(user);
-            setAuthStatus('authenticated');
-        } else {
-            setAuthStatus('unauthenticated');
-        }
+        const unsubscribe = onAuthChange((user) => {
+            if (user) {
+                setCurrentUser(user);
+                setAuthStatus('authenticated');
+            } else {
+                setCurrentUser(null);
+                setAuthStatus('unauthenticated');
+            }
+        });
+        return () => unsubscribe();
     }, []);
 
     /**
@@ -219,35 +222,32 @@ const App: React.FC = () => {
 
     // --- Handlers ---
 
-    const handleLogin = async (email: string, password: string, rememberMe: boolean) => {
-        const user = loginOrSignup(email, password, rememberMe);
-        setCurrentUser(user);
-        setAuthStatus('authenticated');
+    const handleLogin = async (email: string, password: string) => {
+        try {
+            await signInWithEmail(email, password);
+        } catch (error: any) {
+            if (error.code === 'auth/user-not-found') {
+                await signUpWithEmail(email, password);
+            } else {
+                throw error;
+            }
+        }
     };
 
     const handleGuest = async () => {
-        const user = continueAsGuest();
-        setCurrentUser(user);
-        setAuthStatus('authenticated');
+        await continueAsGuest();
     };
     
-    const handleGoToAuth = () => {
+    const handleGoToAuth = async () => {
         setIsMenuOpen(false);
         setIsHistoryOpen(false); // Close any open modals
-        // Delay auth change to allow modals to close gracefully
-        setTimeout(() => {
-          logout(); // This clears hashes from storage
-          setCurrentUser(null);
-          setMessages([]);
-          setAuthStatus('unauthenticated');
-        }, 300);
+        await logout();
+        // Auth state will be handled by onAuthChange listener
     };
 
-    const handleLogout = () => {
-        logout();
-        setCurrentUser(null);
-        setMessages([]);
-        setAuthStatus('unauthenticated');
+    const handleLogout = async () => {
+        await logout();
+        // Auth state will be handled by onAuthChange listener
     };
 
     const handleAgeGateAgree = () => {
@@ -493,7 +493,7 @@ const App: React.FC = () => {
 
     const handleSaveProfile = async (newName: string) => {
         if (currentUser && !currentUser.isGuest) {
-            const updatedUser = await saveCurrentUserName(currentUser.hash, newName);
+            const updatedUser = await saveCurrentUserName(newName);
             if (updatedUser) {
                 setCurrentUser(updatedUser);
             }

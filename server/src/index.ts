@@ -4,6 +4,13 @@ import path from 'path';
 import { GoogleGenAI, Modality } from "@google/genai";
 import 'dotenv/config';
 import { modeDirectives, initialSystemInstruction } from './persona';
+import * as admin from 'firebase-admin';
+const serviceAccount = require('./serviceAccountKey.json');
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL: "https://the-daren-nexus-db-default-rtdb.firebaseio.com/"
+});
 
 const app = express();
 const port = process.env.PORT || 8080;
@@ -12,20 +19,36 @@ const port = process.env.PORT || 8080;
 app.use(cors()); 
 app.use('/', express.json({ limit: '10mb' })); 
 
+const authMiddleware = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const idToken = req.headers.authorization?.split('Bearer ')[1];
+    if (!idToken) {
+        return res.status(401).send('Unauthorized');
+    }
+
+    try {
+        const decodedToken = await admin.auth().verifyIdToken(idToken);
+        (req as any).user = decodedToken;
+        next();
+    } catch (error) {
+        console.error('Error verifying auth token:', error);
+        res.status(403).send('Forbidden');
+    }
+};
+
 // --- Gemini API Initialization ---
 if (!process.env.API_KEY) {
     throw new Error("API_KEY environment variable is not set.");
 }
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, '..', '..', 'public')));
 
 // --- API Endpoints ---
 
 /**
  * Endpoint for handling chat messages.
  */
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', authMiddleware, async (req, res) => {
     const { message, mode, history, user, model, attachments, useWebSearch, quotedMessage } = req.body;
 
     if (!model) {
@@ -101,7 +124,7 @@ app.post('/api/chat', async (req, res) => {
 /**
  * Endpoint for generating speech from text.
  */
-app.post('/api/speech', async (req, res) => {
+app.post('/api/speech', authMiddleware, async (req, res) => {
     const { text, voice } = req.body;
     try {
         const trimmedText = text ? text.trim() : '';
@@ -134,7 +157,7 @@ app.post('/api/speech', async (req, res) => {
 /**
  * Endpoint for classifying the intent of a given text.
  */
-app.post('/api/classify', async (req, res) => {
+app.post('/api/classify', authMiddleware, async (req, res) => {
     const { text } = req.body;
     if (!text || !text.trim()) {
         return res.json({ classification: 'neutral' });
@@ -181,7 +204,7 @@ app.post('/api/classify', async (req, res) => {
 });
 
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public', 'index.html'));
+  res.sendFile(path.join(__dirname, '..', '..', 'public', 'index.html'));
 });
 
 // --- Server Startup ---

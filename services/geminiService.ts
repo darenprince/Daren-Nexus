@@ -1,3 +1,4 @@
+import { getAuthHeaders } from './api';
 import { decode, decodeAudioData } from '../utils/audioUtils';
 
 /**
@@ -16,9 +17,13 @@ export const generateSpeech = async (text: string, audioContext: AudioContext, v
             throw new Error("No text provided to generate speech.");
         }
 
+        const authHeaders = await getAuthHeaders();
         const response = await fetch('/api/speech', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...authHeaders,
+            },
             body: JSON.stringify({ text: trimmedText, voice }),
         });
 
@@ -53,9 +58,13 @@ export const classifyTextIntent = async (text: string): Promise<string> => {
     if (!text.trim()) return 'neutral';
 
     try {
+        const authHeaders = await getAuthHeaders();
         const response = await fetch('/api/classify', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...authHeaders,
+            },
             body: JSON.stringify({ text }),
         });
 

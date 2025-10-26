@@ -35,6 +35,8 @@ interface LiveVoiceModeOverlayProps {
     onClose: () => void;
     onAddLiveMessages: (messages: Message[]) => void;
     systemInstruction: string;
+    apiKey: string;
+    history: Message[];
 }
 
 type Status = 'connecting' | 'listening' | 'thinking' | 'speaking' | 'error';
@@ -54,7 +56,7 @@ const BurnInAnimation: React.FC = () => (
     </div>
 );
 
-export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onClose, onAddLiveMessages, systemInstruction }) => {
+export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onClose, onAddLiveMessages, systemInstruction, apiKey, history }) => {
     const [status, setStatus] = useState<Status>('connecting');
     const [isMuted, setIsMuted] = useState(false);
     const [showBurnIn, setShowBurnIn] = useState(true);
@@ -117,7 +119,7 @@ export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onCl
     useEffect(() => {
         const connectAndListen = async () => {
             try {
-                if (!process.env.API_KEY) {
+                if (!apiKey) {
                     throw new Error("Live voice mode is not configured. The API key is missing.");
                 }
                 
@@ -128,12 +130,18 @@ export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onCl
                 inputAudioContextRef.current = inputCtx;
                 outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
 
-                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+                const ai = new GoogleGenAI({ apiKey: apiKey as string });
+
+                const formattedHistory = history.map(message => ({
+                    role: message.sender === Sender.User ? 'user' : 'model',
+                    parts: [{ text: message.text }],
+                }));
 
                 const sessionPromise = ai.live.connect({
                     model: 'gemini-2.5-flash-native-audio-preview-09-2025',
                     config: {
                         systemInstruction,
+                        history: formattedHistory,
                         responseModalities: [Modality.AUDIO],
                         inputAudioTranscription: {},
                         outputAudioTranscription: {},

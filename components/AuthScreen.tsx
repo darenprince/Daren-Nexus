@@ -4,7 +4,7 @@ import { Embers } from './Embers';
 import { StarryBackground } from './StarryBackground';
 
 interface AuthScreenProps {
-  onLogin: (email: string, password: string, rememberMe: boolean) => Promise<void>;
+  onLogin: (email: string, password: string) => Promise<void>;
   onGuest: () => Promise<void>;
   onForgotPassword: () => void;
 }
@@ -12,7 +12,6 @@ interface AuthScreenProps {
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onGuest, onForgotPassword }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
   const [isLoginLoading, setIsLoginLoading] = useState(false);
   const [isGuestLoading, setIsGuestLoading] = useState(false);
   const [error, setError] = useState('');
@@ -36,7 +35,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onGuest, onForg
       setIsLoginLoading(true);
       setError('');
       setTimeout(() => {
-        onLogin(email.trim(), password, rememberMe)
+        onLogin(email.trim(), password)
           .catch((err) => {
             if (err instanceof Error) {
                 setError(err.message);
@@ -46,6 +45,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onGuest, onForg
             setIsLoginLoading(false);
           });
       }, 2000);
+      try {
+        await onLogin(email.trim(), password);
+      } catch (err) {
+        if (err instanceof Error) {
+            setError(err.message);
+        } else {
+            setError('An unknown error occurred.');
+        }
+      } finally {
+        setIsLoginLoading(false);
+      }
     }
   };
 
@@ -63,6 +73,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onGuest, onForg
             setIsGuestLoading(false);
           });
     }, 2000);
+    try {
+      await onGuest();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unknown error occurred while starting a guest session.');
+    } finally {
+      setIsGuestLoading(false);
+    }
   };
 
   return (
@@ -111,19 +128,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onGuest, onForg
             </div>
         </div>
 
-        <div className="mt-4 px-2 flex justify-between items-center">
-            <label className="flex items-center gap-2 text-gray-400 cursor-pointer">
-                <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="sr-only peer"
-                />
-                <div className="w-4 h-4 rounded-full border-2 border-gray-500 flex items-center justify-center peer-checked:border-nexusPurple-500 transition-colors">
-                    <div className={`w-2 h-2 rounded-full transition-colors ${rememberMe ? 'bg-nexusPurple-500' : 'bg-transparent'}`}></div>
-                </div>
-                <span className="text-sm">Save login info</span>
-            </label>
+        <div className="mt-4 px-2 flex justify-end items-center">
             <button
               type="button"
               onClick={onForgotPassword}
