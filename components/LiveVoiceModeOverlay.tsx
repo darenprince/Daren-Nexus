@@ -30,13 +30,12 @@ import { Sender } from '../types';
 import { encode, decode, decodeAudioData } from '../utils/audioUtils';
 import { VoiceVisualizer } from './VoiceVisualizer';
 import { ListeningLoader } from './ListeningLoader';
+import { CloseIcon } from './CloseIcon';
 
 interface LiveVoiceModeOverlayProps {
     onClose: () => void;
     onAddLiveMessages: (messages: Message[]) => void;
     systemInstruction: string;
-    apiKey: string;
-    history: Message[];
 }
 
 type Status = 'connecting' | 'listening' | 'thinking' | 'speaking' | 'error';
@@ -56,7 +55,7 @@ const BurnInAnimation: React.FC = () => (
     </div>
 );
 
-export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onClose, onAddLiveMessages, systemInstruction, apiKey, history }) => {
+export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onClose, onAddLiveMessages, systemInstruction }) => {
     const [status, setStatus] = useState<Status>('connecting');
     const [isMuted, setIsMuted] = useState(false);
     const [showBurnIn, setShowBurnIn] = useState(true);
@@ -73,6 +72,8 @@ export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onCl
     const mediaStreamSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
     const mediaStreamRef = useRef<MediaStream | null>(null);
     const isMutedRef = useRef(isMuted);
+    const endCallButtonRef = useRef<HTMLButtonElement>(null);
+
     
     const outputSources = useRef(new Set<AudioBufferSourceNode>());
     const nextStartTime = useRef(0);
@@ -90,7 +91,10 @@ export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onCl
     };
 
     useEffect(() => {
-        const timer = setTimeout(() => setShowBurnIn(false), 4000);
+        const timer = setTimeout(() => {
+            setShowBurnIn(false);
+            endCallButtonRef.current?.focus(); // Focus after burn-in for accessibility
+        }, 4000);
         return () => clearTimeout(timer);
     }, []);
     
@@ -119,8 +123,8 @@ export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onCl
     useEffect(() => {
         const connectAndListen = async () => {
             try {
-                if (!apiKey) {
-                    throw new Error("Live voice mode is not configured. The API key is missing.");
+                if (!process.env.API_KEY) {
+                    throw new Error("Live voice mode is not configured. API_KEY is missing.");
                 }
                 
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -130,18 +134,12 @@ export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onCl
                 inputAudioContextRef.current = inputCtx;
                 outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
 
-                const ai = new GoogleGenAI({ apiKey: apiKey as string });
-
-                const formattedHistory = history.map(message => ({
-                    role: message.sender === Sender.User ? 'user' : 'model',
-                    parts: [{ text: message.text }],
-                }));
+                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
                 const sessionPromise = ai.live.connect({
                     model: 'gemini-2.5-flash-native-audio-preview-09-2025',
                     config: {
                         systemInstruction,
-                        history: formattedHistory,
                         responseModalities: [Modality.AUDIO],
                         inputAudioTranscription: {},
                         outputAudioTranscription: {},
@@ -258,13 +256,13 @@ export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onCl
         <>
             <div className="live-voice-header">
                 <button onClick={handleEndSession} className="p-2 text-white/70 hover:text-white btn-radiate-glow" aria-label="Exit Live Mode">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    <CloseIcon />
                 </button>
             </div>
 
             <div className="flex-1 flex flex-col items-center justify-start text-center w-full pt-16">
                  {status === 'listening' && !isMuted && <ListeningLoader />}
-                 <p className={`text-2xl font-medium min-h-[2rem] ${status === 'error' ? 'text-red-400' : 'text-white'}`}>{getStatusText()}</p>
+                 <p id="live-voice-status" className={`text-2xl font-medium min-h-[2rem] ${status === 'error' ? 'text-red-400' : 'text-white'}`} aria-live="assertive">{getStatusText()}</p>
                  <div ref={transcriptEndRef} className="live-voice-transcript w-full max-w-2xl no-scrollbar smooth-scroll fade-scroll-edges">
                      {transcriptionHistory.map((entry, i) => (
                         <p key={i} className={`text-lg ${entry.sender === 'user' ? 'text-white/90' : 'bg-gradient-to-r from-orange-500 to-red-600 bg-clip-text text-transparent font-semibold'}`}>
@@ -285,7 +283,7 @@ export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onCl
                         <MicMuteIcon />
                     </div>
                 </button>
-                <button onClick={handleEndSession} className="end-call-btn p-5 rounded-full btn-radiate-glow" aria-label="End Call">
+                <button ref={endCallButtonRef} onClick={handleEndSession} className="end-call-btn p-5 rounded-full btn-radiate-glow" aria-label="End Call">
                     <PhoneHangUpIcon />
                 </button>
             </div>
@@ -293,9 +291,14 @@ export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onCl
     );
     
     return (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-2xl z-50 flex flex-col items-center justify-center p-4 animate-fade-in">
+        <div 
+          className="fixed inset-0 bg-black/90 backdrop-blur-2xl z-50 flex flex-col items-center justify-center p-4 animate-fade-in"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="live-voice-status"
+        >
             {showBurnIn ? (
-                <div className="flex flex-col items-center">
+                <div className="flex flex-col items-center" role="status">
                     <div className="w-[350px] h-[350px]"><BurnInAnimation /></div>
                     <div className="themed-dot-loader flex space-x-2 mt-8">
                         <div className="h-3 w-3 animate-dot-bounce rounded-full dot-1"></div>

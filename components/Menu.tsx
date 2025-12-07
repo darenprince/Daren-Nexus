@@ -8,6 +8,7 @@ import { Avatar } from './Avatar';
 import { AppIcon } from './AppIcon';
 import { CloseIcon } from './CloseIcon';
 import { EditProfileIcon } from './EditProfileIcon';
+import { VaultIcon } from './VaultIcon';
 import type { User } from '../types';
 
 interface MenuProps {
@@ -23,6 +24,7 @@ interface MenuProps {
   currentUser: User;
   onGoToAuth: () => void;
   onOpenProfileModal: () => void;
+  onOpenMemoryVault: () => void;
 }
 
 const aiModels = [
@@ -62,6 +64,7 @@ export const Menu: React.FC<MenuProps> = ({
     currentUser,
     onGoToAuth,
     onOpenProfileModal,
+    onOpenMemoryVault,
 }) => {
     if (!isOpen) return null;
 
@@ -129,6 +132,7 @@ export const Menu: React.FC<MenuProps> = ({
                     <MenuItem icon={<SpeakerWaveIcon />} text="Voice" onClick={onOpenVoiceSelection} />
                     <MenuItem icon={<SwitchIcon />} text="Switch Vibe" onClick={onOpenModeSelection} />
                     <MenuItem icon={<HistoryIcon />} text="Chat History" onClick={onViewHistory} />
+                    <MenuItem icon={<VaultIcon />} text="Memory Vault" onClick={onOpenMemoryVault} />
                 </div>
                 <div className="p-4 mt-auto">
                     <MenuItem icon={<LogoutIcon />} text="Logout" onClick={onLogout} isDestructive />

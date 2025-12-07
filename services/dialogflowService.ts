@@ -1,21 +1,30 @@
-import { getAuthHeaders } from './api';
+import { GoogleGenAI, GenerateContentResponse } from '@google/genai';
 import type { Message, User } from '../types';
 import { Sender } from '../types';
+import { initialSystemInstruction, modeDirectives } from './persona';
 
 interface SendMessageOptions {
     useWebSearch?: boolean;
 }
 
-interface SendMessageResponse {
+// The response from our new client-side function matches the old server response structure
+export interface SendMessageResponse {
     text: string;
     groundingMetadata?: any;
 }
 
+const getAi = () => {
+    if (!process.env.API_KEY) {
+        // This will be caught by the UI and shown to the user.
+        throw new Error("Application is not configured correctly. API_KEY is missing.");
+    }
+    return new GoogleGenAI({ apiKey: process.env.API_KEY });
+}
+
 /**
- * Sends a chat message and its context to the application's backend server.
- * This function acts as a client for the `/api/chat` endpoint. It formats the
- * chat history, includes the current mode and system instruction, and sends
- * everything to the server, which will then securely call the Google Gemini API.
+ * Sends a chat message and its context directly to the Google Gemini API.
+ * This function constructs the full prompt, including system instructions and
+ * persona, and calls the Gemini API client-side.
  */
 export const sendMessage = async (
     message: string, 
@@ -26,19 +35,31 @@ export const sendMessage = async (
     attachments: { file: File; base64: string }[],
     quotedMessage: Message | null,
     options: SendMessageOptions = {},
-    abortSignal?: AbortSignal
+    abortSignal?: AbortSignal // Note: AbortSignal is not natively supported by the SDK's generateContent call.
 ): Promise<SendMessageResponse> => {
     
-    // Take only the last 10 messages to keep the payload small and relevant.
-    const recentHistory = history.slice(-10);
+    const ai = getAi();
+
+    // Replicate server-side persona logic to build the system instruction
+    let effectiveMode = mode;
+    if (user?.isSpecialUser && mode === 'Fuck It') {
+        effectiveMode = 'Fuck It (Seductive)';
+    }
+    const modeDirective = modeDirectives[effectiveMode as keyof typeof modeDirectives] || modeDirectives['Real Talk'];
     
-    // Format the history into the structure expected by the backend and Gemini API.
+    const finalSystemInstruction = `
+        ${initialSystemInstruction}
+        // --- CURRENT MODE DIRECTIVE: ${mode} ---
+        ${modeDirective}
+    `;
+
+    // Format history for the Gemini API
+    const recentHistory = history.slice(-10);
     const formattedHistory = recentHistory.map(msg => {
-        const parts: (({ text: string; } | { inlineData: { mimeType: string; data: string; }; }))[] = [];
+        const parts: any[] = [];
         if (msg.text) {
           parts.push({ text: msg.text });
         }
-
         if (msg.sender === Sender.User && msg.attachments) {
             msg.attachments.forEach(att => {
                 parts.push({
@@ -54,44 +75,65 @@ export const sendMessage = async (
             parts,
         };
     });
+
+    const finalMessageText = quotedMessage 
+        ? `In response to the user saying "${quotedMessage.text}", the user has now said: "${message}"`
+        : message;
+
+    const messageParts: any[] = [];
+    if (finalMessageText?.trim()) {
+      messageParts.push({ text: finalMessageText });
+    }
+    if (attachments && attachments.length > 0) {
+        attachments.forEach(att => {
+            messageParts.push({
+                inlineData: {
+                    mimeType: att.file.type,
+                    data: att.base64,
+                }
+            });
+        });
+    }
+
+    const contents = [...formattedHistory, { role: 'user', parts: messageParts }];
+
+    const config: any = {
+        systemInstruction: finalSystemInstruction,
+    };
     
-    const attachmentPayload = attachments.map(att => ({
-        mimeType: att.file.type,
-        base64: att.base64,
-    }));
+    if (options.useWebSearch) {
+        config.tools = [{ googleSearch: {} }];
+    }
+
+    if (['Deep Dive', 'Mentor Mode'].includes(mode)) {
+        config.thinkingConfig = {
+            thinkingBudget: model === 'gemini-2.5-pro' ? 8192 : 4096,
+        };
+    }
 
     try {
-        const authHeaders = await getAuthHeaders();
-        const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...authHeaders,
-            },
-            body: JSON.stringify({
-                message,
-                mode,
-                history: formattedHistory,
-                user,
-                model,
-                attachments: attachmentPayload,
-                useWebSearch: options.useWebSearch || false,
-                quotedMessage: quotedMessage,
-            }),
-            signal: abortSignal,
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            console.error("Backend API Error:", errorData);
-            throw new Error(errorData.error || "An error occurred while communicating with the server.");
+        // The AbortController in App.tsx will throw an error if cancelled before the call.
+        // We check it here to stop the request from being made.
+        if (abortSignal?.aborted) {
+            throw new DOMException('Aborted', 'AbortError');
         }
 
-        const data: SendMessageResponse = await response.json();
-        return data;
+        const response: GenerateContentResponse = await ai.models.generateContent({
+            model,
+            contents,
+            config,
+        });
 
+        return {
+            text: response.text,
+            groundingMetadata: response.candidates?.[0]?.groundingMetadata,
+        };
     } catch (error) {
-        console.error("Fetch API Error:", error);
-        throw error;
+        console.error("Error calling Gemini API client-side:", error);
+        if (error instanceof Error && error.name === 'AbortError') {
+            throw error; // Re-throw AbortError to be handled by the UI
+        }
+        // Provide a more user-friendly error
+        throw new Error("Failed to get a response from the AI. The model may have blocked the request or an internal error occurred.");
     }
 };

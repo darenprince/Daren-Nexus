@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { User } from '../types';
 import { CloseIcon } from './CloseIcon';
 
@@ -11,6 +11,14 @@ interface ProfileModalProps {
 
 export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, currentUser, onSave }) => {
     const [name, setName] = useState(currentUser.name || '');
+    const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+    useEffect(() => {
+        if (isOpen) {
+            setName(currentUser.name || '');
+            closeButtonRef.current?.focus();
+        }
+    }, [isOpen, currentUser.name]);
 
     if (!isOpen) return null;
 
@@ -19,11 +27,17 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, cur
     };
 
     return (
-        <div className="modal-overlay animate-fade-in" onClick={onClose}>
+        <div 
+          className="modal-overlay animate-fade-in" 
+          onClick={onClose}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="profile-title"
+        >
             <div className="bg-[var(--modal-bg)] border border-[var(--ui-border-color)] rounded-2xl shadow-2xl p-6 max-w-md w-full transition-colors duration-500" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-4">
-                    <h2 className="font-heading text-xl text-white">Edit Profile</h2>
-                    <button onClick={onClose} className="p-2 rounded-full hover:bg-white/10 transition-colors">
+                    <h2 id="profile-title" className="font-heading text-xl text-white">Edit Profile</h2>
+                    <button ref={closeButtonRef} onClick={onClose} className="p-2 rounded-full hover:bg-white/10 transition-colors">
                         <CloseIcon />
                     </button>
                 </div>

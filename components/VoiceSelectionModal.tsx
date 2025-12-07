@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { useAudioPlayer } from '../hooks/useAudioPlayer';
 import { PreviewPlayButton } from './PreviewPlayButton';
+import { CloseIcon } from './CloseIcon';
 
 interface VoiceSelectionModalProps {
     isOpen: boolean;
@@ -12,11 +13,11 @@ interface VoiceSelectionModalProps {
 }
 
 const ttsVoices = [
-    { id: 'Charon', name: 'The Strategist', previewText: "Let's cut through the bullshit and find the signal in the noise." },
-    { id: 'Fenrir', name: 'The Brawler', previewText: "You wanna talk real? Let's fucking go." },
-    { id: 'Zephyr', name: 'Laid Back', previewText: "Alright, let's just vibe for a minute. What's good?" },
-    { id: 'rasalgethi', name: 'The Philosopher', previewText: "What's the pattern that connects all of this?" },
-    { id: 'Puck', name: 'Nexus Standard', previewText: "This is the Nexus. No filter, no bullshit." },
+    { id: 'Orion', name: 'The Hunter', previewText: "Target acquired. Let's cut to the chase and eliminate the bullshit." },
+    { id: 'Atlas', name: 'The Titan', previewText: "There's no weight in the world heavier than an unspoken truth. Let's lift it." },
+    { id: 'Hyperion', name: 'The Watcher', previewText: "From a higher perspective, the patterns of nonsense become clear." },
+    { id: 'Ares', name: 'The Warlord', previewText: "This isn't a conversation. It's a campaign against mediocrity. Let's fucking go." },
+    { id: 'Fenrir', name: 'The Beast', previewText: "Unleash the primal truth. No chains, no mercy, just raw honesty." },
 ];
 
 export const VoiceSelectionModal: React.FC<VoiceSelectionModalProps> = ({ 
@@ -28,6 +29,13 @@ export const VoiceSelectionModal: React.FC<VoiceSelectionModalProps> = ({
     isVoicePreviewLoading
 }) => {
     const { playbackState, play, stop } = useAudioPlayer();
+    const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+    useEffect(() => {
+        if (isOpen && closeButtonRef.current) {
+            closeButtonRef.current.focus();
+        }
+    }, [isOpen]);
 
     if (!isOpen) return null;
 
@@ -55,24 +63,29 @@ export const VoiceSelectionModal: React.FC<VoiceSelectionModalProps> = ({
 
 
     return (
-        <div className="modal-overlay animate-fade-in" onClick={onClose}>
+        <div 
+          className="modal-overlay animate-fade-in" 
+          onClick={onClose}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="voice-selection-title"
+        >
             <div className="bg-[var(--modal-bg)] border border-[var(--ui-border-color)] rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col overflow-hidden transition-colors duration-500" onClick={(e) => e.stopPropagation()}>
                 <div className="p-6 pb-4">
                     <div className="flex items-center justify-between">
-                        <h2 className="font-heading text-xl text-white">Voice Selection</h2>
-                        <button 
+                        <h2 id="voice-selection-title" className="font-heading text-xl text-white">Voice Selection</h2>
+                        <button
+                            ref={closeButtonRef}
                             onClick={onClose}
                             className="p-2 rounded-full hover:bg-white/10 transition-colors"
                             aria-label="Close voice selection"
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
+                            <CloseIcon />
                         </button>
                     </div>
                 </div>
                 <div className="flex-1 overflow-y-auto px-6 pb-6">
-                    <ul className="space-y-1">
+                    <ul className="space-y-1" role="radiogroup" aria-labelledby="voice-selection-title">
                         {ttsVoices.map(voice => {
                             const previewId = `preview-${voice.id}`;
                             const isThisLoading = isVoicePreviewLoading === voice.id;
@@ -81,8 +94,12 @@ export const VoiceSelectionModal: React.FC<VoiceSelectionModalProps> = ({
                             return (
                                 <li key={voice.id}>
                                     <div 
+                                        role="radio"
+                                        aria-checked={currentTtsVoice === voice.id}
                                         onClick={() => onSelectTtsVoice(voice.id)}
                                         className={`w-full flex items-center justify-between gap-3 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-[var(--card-hover-bg)] transition-colors duration-200 text-left ${currentTtsVoice === voice.id ? 'bg-white/10' : ''}`}
+                                        tabIndex={0}
+                                        onKeyDown={(e) => e.key === 'Enter' || e.key === ' ' ? onSelectTtsVoice(voice.id) : null}
                                     >
                                         <div className="flex items-center gap-2">
                                             <span className={`font-medium text-base ${currentTtsVoice === voice.id ? 'text-white' : 'text-gray-300'}`}>{voice.name}</span>

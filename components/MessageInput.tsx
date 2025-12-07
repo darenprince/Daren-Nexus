@@ -125,6 +125,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
                     onMouseDown={(e) => e.preventDefault()} // Prevents blur on click
                     onClick={() => setIsTrayExpandedManual(true)}
                     className="p-2 text-gray-400 hover:text-white btn-radiate-glow"
+                    aria-label="Expand message options"
                 >
                     <ChevronRightIcon />
                 </button>
@@ -152,7 +153,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
                     type="button"
                     onClick={onToggleListening}
                     className="p-2 text-gray-400 hover:text-white transition-colors btn-radiate-glow"
-                    aria-label={isListening ? 'Stop listening' : 'Start listening'}
+                    aria-label={isListening ? 'Stop listening' : 'Start voice input'}
                   >
                   <MicIcon isListening={isListening} />
                 </button>
@@ -172,6 +173,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               onFocus={handleFocus}
               onBlur={handleBlur}
               placeholder="Message..."
+              aria-label="Chat message input"
               disabled={isLoading || isListening}
               className="relative z-10 w-full bg-[var(--input-bg)] text-white placeholder:text-gray-500 border border-white/10 focus:border-transparent rounded-2xl px-4 py-3 resize-none transition-colors duration-200 no-scrollbar leading-tight"
             />

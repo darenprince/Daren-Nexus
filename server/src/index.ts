@@ -1,54 +1,44 @@
 import express from 'express';
 import cors from 'cors';
-import path from 'path';
+import bodyParser from 'body-parser';
 import { GoogleGenAI, Modality } from "@google/genai";
 import 'dotenv/config';
 import { modeDirectives, initialSystemInstruction } from './persona';
-import * as admin from 'firebase-admin';
-const serviceAccount = require('./serviceAccountKey.json');
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://the-daren-nexus-db-default-rtdb.firebaseio.com/"
-});
 
 const app = express();
 const port = process.env.PORT || 8080;
 
 // --- Middleware Setup ---
 app.use(cors()); 
-app.use('/', express.json({ limit: '10mb' })); 
-
-const authMiddleware = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const idToken = req.headers.authorization?.split('Bearer ')[1];
-    if (!idToken) {
-        return res.status(401).send('Unauthorized');
-    }
-
-    try {
-        const decodedToken = await admin.auth().verifyIdToken(idToken);
-        (req as any).user = decodedToken;
-        next();
-    } catch (error) {
-        console.error('Error verifying auth token:', error);
-        res.status(403).send('Forbidden');
-    }
-};
+app.use(bodyParser.json({ limit: '10mb' })); 
 
 // --- Gemini API Initialization ---
+let ai: GoogleGenAI | null = null;
 if (!process.env.API_KEY) {
-    throw new Error("API_KEY environment variable is not set.");
+    console.error("FATAL ERROR: API_KEY environment variable is not set.");
+    console.error("The server will run, but all Gemini API calls will fail.");
+    console.error("Please create a .env file in the /server directory with your API_KEY.");
+} else {
+    ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 }
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-app.use(express.static(path.join(__dirname, '..', '..', 'public')));
+// --- Helper to check for API Key ---
+const checkApiKey = (res: express.Response): boolean => {
+    if (!ai) {
+        res.status(500).json({ error: "Server is not configured with a valid API_KEY. See server logs for details." });
+        return false;
+    }
+    return true;
+};
 
 // --- API Endpoints ---
 
 /**
  * Endpoint for handling chat messages.
  */
-app.post('/api/chat', authMiddleware, async (req, res) => {
+app.post('/api/chat', async (req, res) => {
+    if (!checkApiKey(res)) return;
+
     const { message, mode, history, user, model, attachments, useWebSearch, quotedMessage } = req.body;
 
     if (!model) {
@@ -105,14 +95,14 @@ app.post('/api/chat', authMiddleware, async (req, res) => {
             };
         }
 
-        const response = await ai.models.generateContent({
+        const response = await ai!.models.generateContent({
             model,
             contents,
             config,
         });
 
         res.json({ 
-            text: response.text ?? '',
+            text: response.text,
             groundingMetadata: response.candidates?.[0]?.groundingMetadata,
         });
     } catch (error: any) {
@@ -124,7 +114,9 @@ app.post('/api/chat', authMiddleware, async (req, res) => {
 /**
  * Endpoint for generating speech from text.
  */
-app.post('/api/speech', authMiddleware, async (req, res) => {
+app.post('/api/speech', async (req, res) => {
+    if (!checkApiKey(res)) return;
+
     const { text, voice } = req.body;
     try {
         const trimmedText = text ? text.trim() : '';
@@ -132,7 +124,7 @@ app.post('/api/speech', authMiddleware, async (req, res) => {
             return res.status(400).json({ error: "No text provided to generate speech." });
         }
         
-        const response = await ai.models.generateContent({
+        const response = await ai!.models.generateContent({
             model: "gemini-2.5-flash-preview-tts",
             contents: [{ parts: [{ text: trimmedText }] }],
             config: {
@@ -157,7 +149,9 @@ app.post('/api/speech', authMiddleware, async (req, res) => {
 /**
  * Endpoint for classifying the intent of a given text.
  */
-app.post('/api/classify', authMiddleware, async (req, res) => {
+app.post('/api/classify', async (req, res) => {
+    if (!checkApiKey(res)) return;
+
     const { text } = req.body;
     if (!text || !text.trim()) {
         return res.json({ classification: 'neutral' });
@@ -185,11 +179,11 @@ app.post('/api/classify', authMiddleware, async (req, res) => {
     `;
 
     try {
-        const response = await ai.models.generateContent({
+        const response = await ai!.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
         });
-        const classification = response.text ? response.text.trim().toLowerCase() : 'neutral';
+        const classification = response.text.trim().toLowerCase();
         
         if (['sexual', 'violent', 'emotional', 'neutral'].includes(classification)) {
             res.json({ classification });
@@ -203,8 +197,16 @@ app.post('/api/classify', authMiddleware, async (req, res) => {
     }
 });
 
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', '..', 'public', 'index.html'));
+/**
+ * Endpoint to securely provide the API key to the client for web-only APIs.
+ * In a production environment, this should be replaced with a more secure
+ * token-based authentication system.
+ */
+app.get('/api/key', (req, res) => {
+    if (!process.env.API_KEY) {
+        return res.status(500).json({ error: "API_KEY is not configured on the server." });
+    }
+    res.json({ apiKey: process.env.API_KEY });
 });
 
 // --- Server Startup ---

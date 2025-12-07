@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User } from '../types';
 import { hasAttemptedNexusAndChill, recordNexusAndChillAttempt } from '../services/persistenceService';
+import { CloseIcon } from './CloseIcon';
 
 interface NexusAndChillModalProps {
     isOpen: boolean;
@@ -31,12 +32,16 @@ export const NexusAndChillModal: React.FC<NexusAndChillModalProps> = ({ isOpen, 
     const [step, setStep] = useState<Step>('checking');
     const [answers, setAnswers] = useState<Answers>({});
     const [result, setResult] = useState<Result | null>(null);
+    const closeButtonRef = useRef<HTMLButtonElement>(null);
 
     useEffect(() => {
         const checkAttempt = async () => {
             if (isOpen) {
                 const hasAttempted = await hasAttemptedNexusAndChill(currentUser.hash);
                 setStep(hasAttempted ? 'alreadyUsed' : 'intro');
+                if (closeButtonRef.current) {
+                    closeButtonRef.current.focus();
+                }
             }
         };
         checkAttempt();
@@ -131,7 +136,7 @@ RETENTION NOTE: Raw data purged in 30 days.
             case 'intro':
                 return (
                     <>
-                        <h2 className="text-2xl font-bold text-white mb-4">Welcome to Nexus & Chill.</h2>
+                        <h2 id="nexus-chill-title" className="text-2xl font-bold text-white mb-4">Welcome to Nexus & Chill.</h2>
                         <p className="text-slate-300 text-lg mb-6">You get one attempt. This is quick (6 questions). If you start, you must finish. Do you accept?</p>
                         <div className="flex gap-4">
                              <button onClick={() => setStep('declined')} className="flex-1 bg-white/10 text-white font-bold py-3 px-6 rounded-full hover:bg-white/20">No</button>
@@ -142,11 +147,11 @@ RETENTION NOTE: Raw data purged in 30 days.
             case 'questions':
                 return (
                     <form onSubmit={handleSubmit} className="text-left w-full">
-                         <h2 className="text-2xl font-bold text-white mb-6 text-center">Eligibility Test</h2>
+                         <h2 id="nexus-chill-title" className="text-2xl font-bold text-white mb-6 text-center">Eligibility Test</h2>
                          <div className="space-y-6">
                             {questions.map(q => (
-                                <div key={q.id}>
-                                    <p className="font-medium text-gray-200 mb-2">{q.text}</p>
+                                <fieldset key={q.id}>
+                                    <legend className="font-medium text-gray-200 mb-2">{q.text}</legend>
                                     <div className="flex gap-4">
                                         {q.options.map(opt => (
                                             <label key={opt} className="flex items-center gap-2 text-gray-300 cursor-pointer">
@@ -158,7 +163,7 @@ RETENTION NOTE: Raw data purged in 30 days.
                                             </label>
                                         ))}
                                     </div>
-                                </div>
+                                </fieldset>
                             ))}
                          </div>
                          <button type="submit" className="w-full mt-8 bg-gradient-to-r from-orange-500 to-red-600 text-white font-bold py-3 px-6 rounded-full hover:opacity-90">Submit Answers - Final</button>
@@ -168,7 +173,7 @@ RETENTION NOTE: Raw data purged in 30 days.
                 const title = result?.finalStatus === 'PASS' ? 'PASS' : 'Pass';
                 return (
                     <div className="text-center w-full">
-                        <h2 className={`text-3xl font-black mb-4 ${result?.finalStatus === 'PASS' ? 'text-green-400' : 'text-green-400'}`}>{title} — eligibility confirmed.</h2>
+                        <h2 id="nexus-chill-title" className={`text-3xl font-black mb-4 ${result?.finalStatus === 'PASS' ? 'text-green-400' : 'text-green-400'}`}>{title} — eligibility confirmed.</h2>
                         <div className="bg-black/20 border border-white/10 rounded-lg p-6">
                              <p className="text-lg text-gray-300">{currentUser.name || currentUser.email}</p>
                              <p className="text-sm text-gray-500 mb-4">{new Date().toLocaleString()}</p>
@@ -179,22 +184,27 @@ RETENTION NOTE: Raw data purged in 30 days.
                     </div>
                 );
             case 'alreadyUsed':
-                 return <p className="text-xl text-center text-amber-400">You have already used your single test. No further attempts allowed.</p>;
+                 return <p id="nexus-chill-title" className="text-xl text-center text-amber-400">You have already used your single test. No further attempts allowed.</p>;
             case 'declined':
-                 return <p className="text-xl text-center text-gray-400">Test canceled. No attempt recorded.</p>;
+                 return <p id="nexus-chill-title" className="text-xl text-center text-gray-400">Test canceled. No attempt recorded.</p>;
             default:
-                return <p>Loading...</p>;
+                return <p id="nexus-chill-title" role="status">Loading...</p>;
         }
     };
 
     if (!isOpen) return null;
 
     return (
-        <div className="modal-overlay animate-fade-in">
+        <div 
+          className="modal-overlay animate-fade-in"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="nexus-chill-title"
+        >
             <div className="bg-[var(--modal-bg)] border border-[var(--ui-border-color)] rounded-2xl shadow-2xl p-8 max-w-lg w-full text-center animate-fade-in transition-colors duration-500 relative" onClick={(e) => e.stopPropagation()}>
                 {step !== 'result' && (
-                    <button onClick={onClose} className="absolute top-4 right-4 p-2 text-gray-500 hover:text-white" aria-label="Close">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    <button ref={closeButtonRef} onClick={onClose} className="absolute top-4 right-4 p-2 text-gray-500 hover:text-white" aria-label="Close">
+                        <CloseIcon />
                     </button>
                 )}
                 {renderContent()}

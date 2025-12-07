@@ -41,6 +41,7 @@ declare global {
 import React, { useState, useEffect, useRef } from 'react';
 import { NexusOrb } from './NexusOrb';
 import { VoiceVisualizer } from './VoiceVisualizer';
+import { CloseIcon } from './CloseIcon';
 
 interface VoiceInputOverlayProps {
   onClose: () => void;
@@ -58,6 +59,8 @@ export const VoiceInputOverlay: React.FC<VoiceInputOverlayProps> = ({ onClose, o
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameId = useRef<number | null>(null);
   const [analyserNode, setAnalyserNode] = useState<AnalyserNode | null>(null);
+  const stopButtonRef = useRef<HTMLButtonElement>(null);
+
 
   const handleStop = () => {
     if (recognitionRef.current) {
@@ -66,6 +69,8 @@ export const VoiceInputOverlay: React.FC<VoiceInputOverlayProps> = ({ onClose, o
   };
 
   useEffect(() => {
+    stopButtonRef.current?.focus();
+    
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       alert('Speech Recognition not supported in this browser.');
@@ -148,7 +153,7 @@ export const VoiceInputOverlay: React.FC<VoiceInputOverlayProps> = ({ onClose, o
             };
             animate();
 
-        } catch (err) {
+        } catch (err: any) {
             console.error("Error accessing microphone:", err);
             let alertMessage = "Could not access the microphone. Please check your browser permissions.";
 
@@ -200,15 +205,18 @@ export const VoiceInputOverlay: React.FC<VoiceInputOverlayProps> = ({ onClose, o
   }, [onClose, onSend]);
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-xl z-50 flex flex-col items-center justify-center p-8 animate-fade-in">
-      <button onClick={onClose} className="absolute top-4 right-4 p-2 text-white/70 hover:text-white" aria-label="Close">
-         <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-        </svg>
+    <div 
+      className="fixed inset-0 bg-black/80 backdrop-blur-xl z-50 flex flex-col items-center justify-center p-8 animate-fade-in"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="voice-input-transcript"
+    >
+      <button onClick={onClose} className="absolute top-4 right-4 p-2 text-white/70 hover:text-white" aria-label="Close voice input">
+         <CloseIcon />
       </button>
 
       <div className="flex-1 flex items-center justify-center">
-        <p className="text-3xl text-white/80 font-medium text-center max-w-3xl min-h-[10rem]">
+        <p id="voice-input-transcript" className="text-3xl text-white/80 font-medium text-center max-w-3xl min-h-[10rem]" aria-live="polite">
           {transcript || 'Listening...'}
         </p>
       </div>
@@ -216,7 +224,7 @@ export const VoiceInputOverlay: React.FC<VoiceInputOverlayProps> = ({ onClose, o
       <VoiceVisualizer isListening={true} analyserNode={analyserNode} />
 
       <div className="flex flex-col items-center">
-        <button onClick={handleStop} className="w-24 h-24 rounded-full flex items-center justify-center" aria-label="Stop listening">
+        <button ref={stopButtonRef} onClick={handleStop} className="w-24 h-24 rounded-full flex items-center justify-center" aria-label="Stop listening">
             <div 
                 className="w-full h-full transition-transform duration-100 ease-out" 
                 style={{ transform: `scale(${orbScale})` }}

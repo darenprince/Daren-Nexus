@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
+import { CloseIcon } from './CloseIcon';
 
 interface AppearanceModalProps {
     isOpen: boolean;
@@ -19,28 +20,41 @@ const themes = [
 ];
 
 export const AppearanceModal: React.FC<AppearanceModalProps> = ({ isOpen, onClose, textZoom, onTextZoomChange, currentTheme, onThemeChange }) => {
+    const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+    useEffect(() => {
+        if (isOpen && closeButtonRef.current) {
+            closeButtonRef.current.focus();
+        }
+    }, [isOpen]);
+    
     if (!isOpen) return null;
 
     return (
-        <div className="modal-overlay animate-fade-in" onClick={onClose}>
+        <div 
+          className="modal-overlay animate-fade-in" 
+          onClick={onClose}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="appearance-title"
+        >
             <div className="bg-[var(--modal-bg)] border border-[var(--ui-border-color)] rounded-2xl shadow-2xl p-6 max-w-md w-full max-h-[90vh] flex flex-col transition-colors duration-500" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-4">
-                    <h2 className="font-heading text-xl text-white">Appearance</h2>
+                    <h2 id="appearance-title" className="font-heading text-xl text-white">Appearance</h2>
                     <button 
+                        ref={closeButtonRef}
                         onClick={onClose}
                         className="p-2 rounded-full hover:bg-white/10 transition-colors"
                         aria-label="Close appearance settings"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                        <CloseIcon />
                     </button>
                 </div>
                 <div className="space-y-6 flex-1">
                     <div>
                         <div className="flex items-center justify-between mb-2">
                             <label htmlFor="text-zoom" className="text-base font-medium text-gray-300">Text Size</label>
-                            <span className="text-base font-mono text-gray-400">{textZoom}%</span>
+                            <span className="text-base font-mono text-gray-400" aria-live="polite">{textZoom}%</span>
                         </div>
                         <input
                             id="text-zoom"
@@ -54,15 +68,16 @@ export const AppearanceModal: React.FC<AppearanceModalProps> = ({ isOpen, onClos
                         />
                     </div>
                     <div>
-                         <p className="text-base font-medium text-gray-300 mb-2">Chat Theme</p>
-                         <div className="grid grid-cols-2 gap-2">
+                         <p id="theme-group-label" className="text-base font-medium text-gray-300 mb-2">Chat Theme</p>
+                         <div className="grid grid-cols-2 gap-2" role="group" aria-labelledby="theme-group-label">
                             {themes.map(theme => (
                                 <button
                                     key={theme.id}
                                     onClick={() => onThemeChange(theme.id)}
                                     className={`p-3 rounded-lg flex items-center gap-3 transition-colors ${currentTheme === theme.id ? 'bg-white/10 ring-2 ring-nexusPurple-500' : 'bg-white/5 hover:bg-white/10'}`}
+                                    aria-pressed={currentTheme === theme.id}
                                 >
-                                    <span className={`w-4 h-4 rounded-full ${theme.color}`}></span>
+                                    <span className={`w-4 h-4 rounded-full ${theme.color}`} aria-hidden="true"></span>
                                     <span className="font-medium text-white">{theme.name}</span>
                                 </button>
                             ))}

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { CloseIcon } from './CloseIcon';
 
 interface ForgotPasswordModalProps {
     isOpen: boolean;
@@ -8,6 +9,17 @@ interface ForgotPasswordModalProps {
 export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ isOpen, onClose }) => {
     const [email, setEmail] = useState('');
     const [isSubmitted, setIsSubmitted] = useState(false);
+    const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+    useEffect(() => {
+        if (isOpen) {
+            // Reset state when modal opens
+            setIsSubmitted(false);
+            setEmail('');
+            // Focus the close button for accessibility
+            closeButtonRef.current?.focus();
+        }
+    }, [isOpen]);
 
     if (!isOpen) return null;
 
@@ -20,21 +32,26 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ isOpen
     };
 
     return (
-        <div className="modal-overlay animate-fade-in" onClick={onClose}>
+        <div 
+          className="modal-overlay animate-fade-in" 
+          onClick={onClose}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="forgot-password-title"
+        >
             <div className="bg-[var(--modal-bg)] border border-[var(--ui-border-color)] rounded-2xl shadow-2xl p-8 max-w-md w-full text-center transition-colors duration-500" onClick={(e) => e.stopPropagation()}>
-                <button 
+                <button
+                    ref={closeButtonRef}
                     onClick={onClose}
                     className="absolute top-4 right-4 p-2 text-gray-500 hover:text-white"
                     aria-label="Close"
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    <CloseIcon />
                 </button>
 
                 {!isSubmitted ? (
                     <>
-                        <h2 className="text-2xl font-bold text-white mb-4">Forgot Password</h2>
+                        <h2 id="forgot-password-title" className="text-2xl font-bold text-white mb-4">Forgot Password</h2>
                         <p className="text-slate-300 mb-6">Enter your email and we'll (pretend to) send you a link to reset your password.</p>
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <input
@@ -42,6 +59,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ isOpen
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 placeholder="your.email@example.com"
+                                aria-label="Email for password reset"
                                 required
                                 className="w-full bg-[#0A0A0B] text-white placeholder:text-gray-500 border-2 border-white/10 focus:border-nexusPurple-500 focus:ring-0 rounded-full px-5 py-3 text-lg transition-colors"
                             />
@@ -55,7 +73,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ isOpen
                     </>
                 ) : (
                     <>
-                        <h2 className="text-2xl font-bold text-green-400 mb-4">Check Your Email</h2>
+                        <h2 id="forgot-password-title" className="text-2xl font-bold text-green-400 mb-4">Check Your Email</h2>
                         <p className="text-slate-300 mb-6">If an account with that email exists, a password reset link has been sent. (This is a simulation, so you can just close this window now.)</p>
                         <button
                             onClick={onClose}
