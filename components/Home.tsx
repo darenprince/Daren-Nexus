@@ -98,7 +98,7 @@ export const Home: React.FC<HomeProps> = ({ onSelectMode, onAnimationComplete, c
     if (introStep === 'loading') {
         return (
             <div className="flex-1 flex flex-col items-center justify-between p-4 text-center animate-fade-in relative">
-                <div className="mb-8">
+                <div className="mb-8 flex flex-col items-center">
                     <LoadingAnimation onComplete={handleLoadingComplete} />
                     {/* Placeholder for layout consistency */}
                     <div className="relative w-56 h-56 mb-6 opacity-0"><NexusOrb /></div>
@@ -121,7 +121,7 @@ export const Home: React.FC<HomeProps> = ({ onSelectMode, onAnimationComplete, c
 
     return (
         <div className={`flex-1 flex flex-col items-center justify-between p-4 text-center relative ${contentAnimationClass}`}>
-            <div className="mb-8">
+            <div className="mb-8 flex flex-col items-center">
                 <div className="relative w-56 h-56 mb-6">
                     {isFlameVisible && (
                         <div className="absolute inset-0 flex items-center justify-center opacity-[0.12] pointer-events-none">

@@ -121,7 +121,13 @@ export const VoiceInputOverlay: React.FC<VoiceInputOverlayProps> = ({ onClose, o
 
     const setupAudio = async () => {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                },
+            });
             streamRef.current = stream;
 
             const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -206,7 +212,7 @@ export const VoiceInputOverlay: React.FC<VoiceInputOverlayProps> = ({ onClose, o
 
   return (
     <div 
-      className="fixed inset-0 bg-black/80 backdrop-blur-xl z-50 flex flex-col items-center justify-center p-8 animate-fade-in"
+      className="fixed inset-0 bg-black/80 backdrop-blur-xl z-60 flex flex-col items-center justify-center p-8 animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-labelledby="voice-input-transcript"

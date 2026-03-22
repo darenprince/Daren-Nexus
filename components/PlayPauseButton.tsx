@@ -16,7 +16,7 @@ export const PlayPauseButton: React.FC<PlayPauseButtonProps> = ({ onClick, isPla
   return (
     <button 
       onClick={onClick} 
-      className="absolute -bottom-3 -right-3 w-10 h-10 rounded-full flex items-center justify-center transition-all group" 
+      className="absolute bottom-2 right-2 w-10 h-10 rounded-full flex items-center justify-center transition-all group bg-black/50 backdrop-blur-sm" 
       aria-label={isLoading ? "Loading audio" : isPlaying ? "Stop audio" : "Play audio"}
       disabled={isLoading}
     >

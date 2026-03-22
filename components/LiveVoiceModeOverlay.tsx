@@ -6,19 +6,10 @@ The Gemini Live API (`ai.live.connect`) is a web-only feature that establishes a
 direct WebSocket connection from the client to Google's servers. The Node.js
 `@google/genai` SDK does not support this Live API.
 
-Therefore, this component CANNOT be proxied through our Node.js backend using
-the existing SDK. For a truly secure production environment where the API key is
-never exposed to the client, a dedicated, low-latency WebSocket proxy service
-would need to be built. This is a complex task beyond the scope of this
-component's current architecture.
-
-As a temporary measure for functionality, this component initializes the Gemini
-API directly on the client. In a production build, `process.env.API_KEY` will
-be undefined. This component will fail unless a key is provided through another
-mechanism.
-
-TODO: For production, replace the client-side API key with a secure token
-generation and validation system.
+This component now securely fetches the API key from the `/api/key` backend
+endpoint. This prevents the key from being exposed in the bundled client-side
+code, making the feature more secure and stable. The backend server is
+responsible for managing the API key.
 ================================================================================
 */
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -31,6 +22,7 @@ import { encode, decode, decodeAudioData } from '../utils/audioUtils';
 import { VoiceVisualizer } from './VoiceVisualizer';
 import { ListeningLoader } from './ListeningLoader';
 import { CloseIcon } from './CloseIcon';
+import { getApiKey } from '../services/geminiService';
 
 interface LiveVoiceModeOverlayProps {
     onClose: () => void;
@@ -99,11 +91,30 @@ export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onCl
     }, []);
     
     useEffect(() => {
-        transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        // Use 'auto' scroll behavior to prevent jarring smooth scroll on every interim update.
+        transcriptEndRef.current?.scrollIntoView({ behavior: 'auto' });
     }, [transcriptionHistory, currentInterimTranscript]);
 
     const cleanup = useCallback(() => {
         if (thinkingTimerRef.current) clearTimeout(thinkingTimerRef.current);
+        
+        // Save any final, unturned transcription fragments before closing.
+        const userText = userInputTranscript.current.trim();
+        const aiText = aiOutputTranscript.current.trim();
+        const finalMessages: Message[] = [];
+        if (userText) {
+            finalMessages.push({ id: '', text: userText, sender: Sender.User, timestamp: new Date().toISOString() });
+        }
+        if (aiText) {
+            finalMessages.push({ id: '', text: aiText, sender: Sender.AI, timestamp: new Date().toISOString() });
+        }
+        if (finalMessages.length > 0) {
+            onAddLiveMessages(finalMessages);
+        }
+        userInputTranscript.current = '';
+        aiOutputTranscript.current = '';
+
+        // Clean up resources
         sessionRef.current?.close();
         sessionRef.current = null;
         mediaStreamRef.current?.getTracks().forEach(track => track.stop());
@@ -113,7 +124,7 @@ export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onCl
         if (outputAudioContextRef.current?.state !== 'closed') outputAudioContextRef.current?.close();
         outputSources.current.forEach(source => source.stop());
         outputSources.current.clear();
-    }, []);
+    }, [onAddLiveMessages]);
     
     const handleEndSession = useCallback(() => {
         cleanup();
@@ -123,18 +134,25 @@ export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onCl
     useEffect(() => {
         const connectAndListen = async () => {
             try {
-                if (!process.env.API_KEY) {
-                    throw new Error("Live voice mode is not configured. API_KEY is missing.");
+                const apiKey = await getApiKey();
+                if (!apiKey) {
+                    throw new Error("API_KEY is not configured on the server. Live voice mode cannot be started.");
                 }
                 
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                    },
+                });
                 mediaStreamRef.current = stream;
 
                 const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
                 inputAudioContextRef.current = inputCtx;
                 outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
 
-                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                const ai = new GoogleGenAI({ apiKey });
 
                 const sessionPromise = ai.live.connect({
                     model: 'gemini-2.5-flash-native-audio-preview-09-2025',
@@ -143,7 +161,7 @@ export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onCl
                         responseModalities: [Modality.AUDIO],
                         inputAudioTranscription: {},
                         outputAudioTranscription: {},
-                        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Fenrir' } } }
+                        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } } }
                     },
                     callbacks: {
                         onopen: () => {
@@ -210,10 +228,24 @@ export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onCl
                             if (message.serverContent?.turnComplete) {
                                 const userText = userInputTranscript.current.trim();
                                 const aiText = aiOutputTranscript.current.trim();
+                                
+                                const newMessagesForChat: Message[] = [];
                                 const newEntries: TranscriptionEntry[] = [];
-                                if (userText) newEntries.push({ sender: 'user', text: userText });
-                                if (aiText) newEntries.push({ sender: 'ai', text: aiText });
-                                if (newEntries.length > 0) setTranscriptionHistory(prev => [...prev, ...newEntries]);
+                                
+                                if (userText) {
+                                    newEntries.push({ sender: 'user', text: userText });
+                                    newMessagesForChat.push({ id: '', text: userText, sender: Sender.User, timestamp: new Date().toISOString() });
+                                }
+                                if (aiText) {
+                                    newEntries.push({ sender: 'ai', text: aiText });
+                                     newMessagesForChat.push({ id: '', text: aiText, sender: Sender.AI, timestamp: new Date().toISOString() });
+                                }
+                                if (newEntries.length > 0) {
+                                    setTranscriptionHistory(prev => [...prev, ...newEntries]);
+                                }
+                                if (newMessagesForChat.length > 0) {
+                                    onAddLiveMessages(newMessagesForChat);
+                                }
                                 
                                 userInputTranscript.current = '';
                                 aiOutputTranscript.current = '';
@@ -238,7 +270,7 @@ export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onCl
 
         connectAndListen();
         return () => cleanup();
-    }, [systemInstruction, onAddLiveMessages, cleanup]);
+    }, [systemInstruction, cleanup, onAddLiveMessages]);
 
     const getStatusText = () => {
         if (isMuted) return 'Muted';
@@ -260,23 +292,33 @@ export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onCl
                 </button>
             </div>
 
-            <div className="flex-1 flex flex-col items-center justify-start text-center w-full pt-16">
-                 {status === 'listening' && !isMuted && <ListeningLoader />}
-                 <p id="live-voice-status" className={`text-2xl font-medium min-h-[2rem] ${status === 'error' ? 'text-red-400' : 'text-white'}`} aria-live="assertive">{getStatusText()}</p>
-                 <div ref={transcriptEndRef} className="live-voice-transcript w-full max-w-2xl no-scrollbar smooth-scroll fade-scroll-edges">
+            {/* Transcript Area */}
+            <div className="w-full max-w-3xl mx-auto flex-1 flex flex-col justify-end min-h-0 pt-16 pb-4 px-4 text-center">
+                 <div className="live-voice-transcript w-full no-scrollbar smooth-scroll fade-scroll-edges">
                      {transcriptionHistory.map((entry, i) => (
-                        <p key={i} className={`text-lg ${entry.sender === 'user' ? 'text-white/90' : 'bg-gradient-to-r from-orange-500 to-red-600 bg-clip-text text-transparent font-semibold'}`}>
+                        <p key={i} className={`text-2xl leading-relaxed ${entry.sender === 'user' ? 'text-white/90' : 'bg-gradient-to-r from-orange-500 to-red-600 bg-clip-text text-transparent font-semibold'}`}>
                            {entry.text}
                         </p>
                      ))}
-                     {currentInterimTranscript && <p className="text-lg text-white/60">{currentInterimTranscript}</p>}
+                     {currentInterimTranscript && <p className="text-2xl leading-relaxed text-white/60">{currentInterimTranscript}</p>}
+                     <div ref={transcriptEndRef} />
                  </div>
             </div>
 
+            {/* Middle Area: Loader & Status */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center text-center w-full pointer-events-none">
+                <div className="relative w-64 h-64 flex-shrink-0">
+                    {status === 'listening' && !isMuted && <ListeningLoader />}
+                </div>
+                 <p id="live-voice-status" className={`text-xl font-medium min-h-[2rem] -mt-8 ${status === 'error' ? 'text-red-400' : 'text-white'}`} aria-live="assertive">{getStatusText()}</p>
+            </div>
+
+            {/* Bottom Visualizer */}
             <div className="absolute bottom-12 left-0 right-0 h-48 pointer-events-none">
                 <VoiceVisualizer isListening={!isMuted} analyserNode={analyserNode} />
             </div>
 
+            {/* Bottom Controls */}
             <div className="live-voice-footer left-1/2 -translate-x-1/2">
                 <button onClick={handleToggleMute} className={`mute-btn p-5 rounded-full transition-colors btn-radiate-glow ${isMuted ? 'muted' : ''}`} aria-label={isMuted ? "Unmute" : "Mute"}>
                     <div className="text-white">
@@ -292,13 +334,13 @@ export const LiveVoiceModeOverlay: React.FC<LiveVoiceModeOverlayProps> = ({ onCl
     
     return (
         <div 
-          className="fixed inset-0 bg-black/90 backdrop-blur-2xl z-50 flex flex-col items-center justify-center p-4 animate-fade-in"
+          className="fixed inset-0 bg-black/90 backdrop-blur-2xl z-60 flex flex-col items-center p-4 animate-fade-in"
           role="dialog"
           aria-modal="true"
           aria-labelledby="live-voice-status"
         >
             {showBurnIn ? (
-                <div className="flex flex-col items-center" role="status">
+                <div className="flex flex-col items-center justify-center h-full" role="status">
                     <div className="w-[350px] h-[350px]"><BurnInAnimation /></div>
                     <div className="themed-dot-loader flex space-x-2 mt-8">
                         <div className="h-3 w-3 animate-dot-bounce rounded-full dot-1"></div>

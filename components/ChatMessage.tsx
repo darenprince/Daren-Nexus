@@ -9,8 +9,6 @@ interface ChatMessageProps {
   ttsLoadingMessageId: string | null;
 }
 
-const TRUNCATION_LIMIT = 280; // Character limit for initial display
-
 /**
  * Renders a single chat message bubble for either the user or the AI.
  * It handles message truncation, attachment display, and audio playback controls.
@@ -18,8 +16,6 @@ const TRUNCATION_LIMIT = 280; // Character limit for initial display
 export const ChatMessage: React.FC<ChatMessageProps> = ({ message, textZoom, ttsLoadingMessageId }) => {
   // State to track if the component has just mounted to trigger an animation.
   const [isNewlyMounted, setIsNewlyMounted] = useState(true);
-  // State to manage the expansion of long AI messages.
-  const [isExpanded, setIsExpanded] = useState(false);
   
   const isAI = message.sender === Sender.AI;
   const fontSizeRem = textZoom / 100;
@@ -41,6 +37,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, textZoom, tts
 
   // Determines if the audio for this specific message is currently being generated.
   const isAudioLoading = isAI && !message.audioBuffer && ttsLoadingMessageId === message.id;
+  // Determines if audio is available or loading.
+  const hasAudio = isAI && (message.audioBuffer || isAudioLoading);
   // Determines if the audio is either loading or currently playing.
   const isAudioActive = isAI && (isAudioLoading || isPlaying);
   
@@ -53,12 +51,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, textZoom, tts
       play(message.id, message.audioBuffer);
     }
   };
-
-  const isLongAiMessage = isAI && message.text.length > TRUNCATION_LIMIT;
   
-  const displayText = isLongAiMessage && !isExpanded
-    ? message.text.substring(0, TRUNCATION_LIMIT) + '...'
-    : message.text;
+  const displayText = message.text || '';
 
   // Replace newline characters with <br> for proper HTML rendering.
   const displayHtml = displayText.replace(/\n/g, '<br />');
@@ -79,18 +73,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, textZoom, tts
         >
           <div 
             className="prose prose-invert prose-base break-words" 
-            style={{ fontSize: `${fontSizeRem}rem` }}
+            style={{ fontSize: `${fontSizeRem}rem`, paddingBottom: hasAudio ? '2.5rem' : '0' }}
             dangerouslySetInnerHTML={{ __html: displayHtml }} 
           />
-
-          {isLongAiMessage && !isExpanded && (
-            <button 
-              onClick={() => setIsExpanded(true)}
-              className="text-nexusPurple-500/90 font-semibold mt-2 hover:underline focus:outline-none"
-            >
-              Read More...
-            </button>
-          )}
           
           {message.attachments && message.attachments.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
@@ -105,7 +90,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, textZoom, tts
               </div>
           )}
 
-           {(isAI && (message.audioBuffer || isAudioLoading)) && (
+           {hasAudio && (
                 <PlayPauseButton
                   onClick={handleTogglePlay}
                   isPlaying={isPlaying}

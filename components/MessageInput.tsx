@@ -66,7 +66,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
       textareaRef.current.style.height = 'auto';
       const scrollHeight = textareaRef.current.scrollHeight;
       const newHeight = scrollHeight;
-      textareaRef.current.style.height = `${Math.min(newHeight, 200)}px`;
+      textareaRef.current.style.height = `${newHeight}px`;
     }
   }, [input, isFocused]);
 

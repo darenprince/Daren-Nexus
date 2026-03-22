@@ -1,12 +1,24 @@
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
-import { GoogleGenAI, Modality } from "@google/genai";
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { GoogleGenAI, Modality, Content, ThinkingLevel } from "@google/genai";
 import 'dotenv/config';
 import { modeDirectives, initialSystemInstruction } from './persona';
 
+// Define a leaner Message type for backend processing
+interface BackendMessage {
+  id: string;
+  text: string;
+  sender: 'user' | 'ai';
+  timestamp: string;
+  attachments?: { type: 'image'; base64: string; mimeType: string; }[];
+  groundingMetadata?: any;
+}
+
 const app = express();
-const port = process.env.PORT || 8080;
+const port = 3000;
 
 // --- Middleware Setup ---
 app.use(cors()); 
@@ -34,6 +46,14 @@ const checkApiKey = (res: express.Response): boolean => {
 // --- API Endpoints ---
 
 /**
+ * Health check endpoint to verify server is running.
+ */
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'ok', apiKeyPresent: !!process.env.API_KEY });
+});
+
+
+/**
  * Endpoint for handling chat messages.
  */
 app.post('/api/chat', async (req, res) => {
@@ -58,7 +78,27 @@ app.post('/api/chat', async (req, res) => {
             ${modeDirective}
         `;
         
-        const formattedHistory = history || [];
+        // CRITICAL FIX: Format history from client structure to Gemini API structure
+        const formattedHistory: Content[] = (history || []).map((msg: BackendMessage) => {
+            const parts = [];
+            if (msg.text) {
+                parts.push({ text: msg.text });
+            }
+            if (msg.attachments) {
+                msg.attachments.forEach(att => {
+                    parts.push({
+                        inlineData: {
+                            mimeType: att.mimeType,
+                            data: att.base64,
+                        }
+                    });
+                });
+            }
+            return {
+                role: msg.sender === 'user' ? 'user' : 'model',
+                parts: parts,
+            };
+        });
 
         const finalMessage = quotedMessage 
             ? `In response to the user saying "${quotedMessage.text}", the user has now said: "${message}"`
@@ -79,7 +119,7 @@ app.post('/api/chat', async (req, res) => {
             });
         }
         
-        const contents = [...formattedHistory, { role: 'user', parts: messageParts }];
+        const contents: Content[] = [...formattedHistory, { role: 'user', parts: messageParts }];
 
         const config: any = {
             systemInstruction: finalSystemInstruction,
@@ -90,9 +130,15 @@ app.post('/api/chat', async (req, res) => {
         }
 
         if (['Deep Dive', 'Mentor Mode'].includes(mode)) {
-            config.thinkingConfig = {
-                thinkingBudget: model === 'gemini-2.5-pro' ? 8192 : 4096,
-            };
+            if (model.startsWith('gemini-3')) {
+                config.thinkingConfig = {
+                    thinkingLevel: ThinkingLevel.HIGH,
+                };
+            } else {
+                config.thinkingConfig = {
+                    thinkingBudget: model.includes('pro') ? 8192 : 4096,
+                };
+            }
         }
 
         const response = await ai!.models.generateContent({
@@ -102,7 +148,7 @@ app.post('/api/chat', async (req, res) => {
         });
 
         res.json({ 
-            text: response.text,
+            text: response.text || '',
             groundingMetadata: response.candidates?.[0]?.groundingMetadata,
         });
     } catch (error: any) {
@@ -130,7 +176,7 @@ app.post('/api/speech', async (req, res) => {
             config: {
                 responseModalities: [Modality.AUDIO],
                 speechConfig: {
-                    voiceConfig: { prebuiltVoiceConfig: { voiceName: voice || 'Puck' } },
+                    voiceConfig: { prebuiltVoiceConfig: { voiceName: voice || 'Charon' } },
                 },
             },
         });
@@ -183,7 +229,7 @@ app.post('/api/classify', async (req, res) => {
             model: 'gemini-2.5-flash',
             contents: prompt,
         });
-        const classification = response.text.trim().toLowerCase();
+        const classification = (response.text || '').trim().toLowerCase();
         
         if (['sexual', 'violent', 'emotional', 'neutral'].includes(classification)) {
             res.json({ classification });
@@ -198,9 +244,9 @@ app.post('/api/classify', async (req, res) => {
 });
 
 /**
- * Endpoint to securely provide the API key to the client for web-only APIs.
- * In a production environment, this should be replaced with a more secure
- * token-based authentication system.
+ * Endpoint to securely provide the API key to the client for web-only APIs like Live Voice.
+ * In a production environment, this could be enhanced with stricter origin checks or a
+ * short-lived token system.
  */
 app.get('/api/key', (req, res) => {
     if (!process.env.API_KEY) {
@@ -209,7 +255,19 @@ app.get('/api/key', (req, res) => {
     res.json({ apiKey: process.env.API_KEY });
 });
 
+// --- Frontend Serving ---
+// FIX: Resolve __dirname in ES module scope for static file serving.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const rootPath = path.join(__dirname, '..', '..');
+app.use(express.static(rootPath));
+app.get('*', (req, res) => {
+    res.sendFile(path.join(rootPath, 'index.html'));
+});
+
+
 // --- Server Startup ---
 app.listen(port, () => {
     console.log(`Daren Nexus server is running on port ${port}`);
+    console.log(`Access the application at http://localhost:${port}`);
 });

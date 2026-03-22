@@ -24,7 +24,7 @@ export const Intro: React.FC<IntroProps> = ({ onIntroComplete }) => {
   }, [onIntroComplete]);
 
   return (
-    <div className={`fixed inset-0 bg-main-gradient flex flex-col items-center justify-center z-50 p-8 text-center transition-opacity duration-500 ${animationClass}`}>
+    <div className={`fixed inset-0 bg-main-gradient flex flex-col items-center justify-center z-[100] p-8 text-center transition-opacity duration-500 ${animationClass}`}>
       <div className="w-24 h-24 mb-6">
         <NexusOrb />
       </div>

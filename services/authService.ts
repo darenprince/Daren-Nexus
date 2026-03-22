@@ -19,8 +19,13 @@ const hashPassword = (password: string): string => {
 };
 
 const getUsers = (): StoredUser[] => {
-    const raw = localStorage.getItem(USERS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    try {
+        const raw = localStorage.getItem(USERS_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch (error) {
+        console.error("Failed to parse users from localStorage:", error);
+        return [];
+    }
 };
 
 const saveUsers = (users: StoredUser[]): void => {

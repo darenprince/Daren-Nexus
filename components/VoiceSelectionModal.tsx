@@ -10,15 +10,8 @@ interface VoiceSelectionModalProps {
     onSelectTtsVoice: (voice: string) => void;
     onPreviewTtsVoice: (voice: string, text: string) => Promise<AudioBuffer | undefined>;
     isVoicePreviewLoading: string | null;
+    ttsVoices: { id: string; name: string; previewText: string; }[];
 }
-
-const ttsVoices = [
-    { id: 'Orion', name: 'The Hunter', previewText: "Target acquired. Let's cut to the chase and eliminate the bullshit." },
-    { id: 'Atlas', name: 'The Titan', previewText: "There's no weight in the world heavier than an unspoken truth. Let's lift it." },
-    { id: 'Hyperion', name: 'The Watcher', previewText: "From a higher perspective, the patterns of nonsense become clear." },
-    { id: 'Ares', name: 'The Warlord', previewText: "This isn't a conversation. It's a campaign against mediocrity. Let's fucking go." },
-    { id: 'Fenrir', name: 'The Beast', previewText: "Unleash the primal truth. No chains, no mercy, just raw honesty." },
-];
 
 export const VoiceSelectionModal: React.FC<VoiceSelectionModalProps> = ({ 
     isOpen, 
@@ -26,7 +19,8 @@ export const VoiceSelectionModal: React.FC<VoiceSelectionModalProps> = ({
     currentTtsVoice,
     onSelectTtsVoice,
     onPreviewTtsVoice,
-    isVoicePreviewLoading
+    isVoicePreviewLoading,
+    ttsVoices
 }) => {
     const { playbackState, play, stop } = useAudioPlayer();
     const closeButtonRef = useRef<HTMLButtonElement>(null);

@@ -6,7 +6,7 @@ let animationFrameId: number | null = null;
 let startTime = 0;
 let startedAt = 0;
 
-const getAudioContext = (): AudioContext => {
+export const getAudioContext = (): AudioContext => {
   if (!audioContext || audioContext.state === 'closed') {
     // FIX: Specify the sample rate to match the TTS decoding context.
     // This is critical because an AudioBuffer created with one sample rate
@@ -45,8 +45,8 @@ const play = (
   const context = getAudioContext();
   
   // Sanity check for sample rate mismatch before attempting to play.
-  if (context.sampleRate !== buffer.sampleRate) {
-    console.error(`Audio playback failed: Sample rate mismatch. Context is ${context.sampleRate}Hz, Buffer is ${buffer.sampleRate}Hz.`);
+  if (!buffer || context.sampleRate !== buffer.sampleRate) {
+    console.error(`Audio playback failed: Sample rate mismatch. Context is ${context.sampleRate}Hz, Buffer is ${buffer?.sampleRate}Hz.`);
     onEnd(); // End the playback state in the UI.
     return;
   }

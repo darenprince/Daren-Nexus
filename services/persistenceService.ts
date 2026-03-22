@@ -6,24 +6,6 @@ const PFX = 'darenNexus';
 // Key Generator
 const getKey = (base: string, userHash: string) => `${PFX}_${base}_${userHash}`;
 
-// --- "Nexus & Chill" Attempt Tracking ---
-export const hasAttemptedNexusAndChill = async (userHash: string): Promise<boolean> => {
-    try {
-        return localStorage.getItem(getKey('nexusChillAttempt', userHash)) === 'true';
-    } catch (error) {
-        console.error("Persistence error:", error);
-        return false;
-    }
-};
-
-export const recordNexusAndChillAttempt = async (userHash: string): Promise<void> => {
-    try {
-        localStorage.setItem(getKey('nexusChillAttempt', userHash), 'true');
-    } catch (error) {
-        console.error("Persistence error:", error);
-    }
-};
-
 
 // --- User Profile (The only non-user-specific key is the list of users itself) ---
 export const saveUser = async (userHash: string, user: User): Promise<void> => {
@@ -52,7 +34,9 @@ export const getUser = async (userHash: string): Promise<User | null> => {
 // --- Chat History ---
 export const saveCurrentSession = async (userHash: string, messages: Message[]): Promise<void> => {
     try {
-        localStorage.setItem(getKey('chatHistory', userHash), JSON.stringify(messages));
+        // Strip non-serializable audioBuffer from messages before saving.
+        const serializableMessages = messages.map(({ audioBuffer, ...rest }) => rest);
+        localStorage.setItem(getKey('chatHistory', userHash), JSON.stringify(serializableMessages));
     } catch (error) {
         console.error("Persistence error:", error);
     }
@@ -70,7 +54,12 @@ export const getCurrentSession = async (userHash: string): Promise<Message[] | n
 
 export const saveArchivedSessions = async (userHash: string, sessions: ChatSession[]): Promise<void> => {
     try {
-        localStorage.setItem(getKey('archivedSessions', userHash), JSON.stringify(sessions));
+        // Strip non-serializable audioBuffer from messages in each session.
+        const serializableSessions = sessions.map(session => ({
+            ...session,
+            messages: session.messages.map(({ audioBuffer, ...rest }) => rest)
+        }));
+        localStorage.setItem(getKey('archivedSessions', userHash), JSON.stringify(serializableSessions));
     } catch (error) {
         console.error("Persistence error:", error);
     }

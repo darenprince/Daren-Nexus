@@ -3,7 +3,7 @@ import { AppIconBlack } from './AppIconBlack';
 
 export const ListeningLoader: React.FC = () => {
     return (
-        <div className="absolute inset-0 flex items-center justify-center animate-fade-in -z-10">
+        <div className="relative w-full h-full flex items-center justify-center animate-fade-in">
             <div className="loader-inner">
                 <div className="loader-logo">
                     <AppIconBlack />

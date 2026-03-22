@@ -1,18 +1,21 @@
 {
   "name": "daren-nexus-server",
   "version": "1.0.0",
+  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "start": "node dist/index.js",
-    "dev": "nodemon src/index.ts",
-    "build": "tsc"
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@google/genai": "^1.25.0",
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "tsx": "^4.19.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

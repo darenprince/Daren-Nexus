@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User } from '../types';
-import { hasAttemptedNexusAndChill, recordNexusAndChillAttempt } from '../services/persistenceService';
 import { CloseIcon } from './CloseIcon';
 
 interface NexusAndChillModalProps {
@@ -9,7 +8,7 @@ interface NexusAndChillModalProps {
     currentUser: User;
 }
 
-type Step = 'checking' | 'intro' | 'questions' | 'result' | 'alreadyUsed' | 'declined';
+type Step = 'checking' | 'intro' | 'questions' | 'result' | 'declined';
 type Answers = { [key: string]: string };
 type Result = {
     finalStatus: 'PASS' | 'FAIL';
@@ -35,16 +34,12 @@ export const NexusAndChillModal: React.FC<NexusAndChillModalProps> = ({ isOpen, 
     const closeButtonRef = useRef<HTMLButtonElement>(null);
 
     useEffect(() => {
-        const checkAttempt = async () => {
-            if (isOpen) {
-                const hasAttempted = await hasAttemptedNexusAndChill(currentUser.hash);
-                setStep(hasAttempted ? 'alreadyUsed' : 'intro');
-                if (closeButtonRef.current) {
-                    closeButtonRef.current.focus();
-                }
+        if (isOpen) {
+            setStep('intro');
+            if (closeButtonRef.current) {
+                closeButtonRef.current.focus();
             }
-        };
-        checkAttempt();
+        }
     }, [isOpen, currentUser.hash]);
     
     const handleAnswerChange = (questionId: string, answer: string) => {
@@ -52,7 +47,6 @@ export const NexusAndChillModal: React.FC<NexusAndChillModalProps> = ({ isOpen, 
     };
 
     const handleStart = () => {
-        recordNexusAndChillAttempt(currentUser.hash); // Record attempt as soon as they start
         setStep('questions');
     };
     
@@ -117,10 +111,8 @@ ${calcResult.safetyFlags.join('\n') || 'None'}
 ----------------------------------
 RETENTION NOTE: Raw data purged in 30 days.
         `;
-        console.log("--- AUDIT FOR DAREN (SIMULATED EMAIL) ---", audit);
-        const mailtoLink = `mailto:daren.prince@gmail.com?subject=Nexus & Chill Audit: ${currentUser.email}&body=${encodeURIComponent(audit)}`;
-        // In a real app, you'd post this to a server. Here, we can open a mailto link or just log it.
-        // window.open(mailtoLink);
+        // In a real app, this would be sent to a secure backend endpoint.
+        // For this version, the audit is generated but not exposed on the client.
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -183,8 +175,6 @@ RETENTION NOTE: Raw data purged in 30 days.
                         <button onClick={onClose} className="w-full mt-6 bg-white/10 text-white font-bold py-3 px-6 rounded-full hover:bg-white/20">Close</button>
                     </div>
                 );
-            case 'alreadyUsed':
-                 return <p id="nexus-chill-title" className="text-xl text-center text-amber-400">You have already used your single test. No further attempts allowed.</p>;
             case 'declined':
                  return <p id="nexus-chill-title" className="text-xl text-center text-gray-400">Test canceled. No attempt recorded.</p>;
             default:

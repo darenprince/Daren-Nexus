@@ -26,7 +26,9 @@ export async function decodeAudioData(
     sampleRate: number,
     numChannels: number,
 ): Promise<AudioBuffer> {
-    const dataInt16 = new Int16Array(data.buffer);
+    // Ensure the data length is a multiple of 2 for Int16Array.
+    const evenLength = data.byteLength - (data.byteLength % 2);
+    const dataInt16 = new Int16Array(data.buffer, data.byteOffset, evenLength / 2);
     const frameCount = dataInt16.length / numChannels;
     const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
 

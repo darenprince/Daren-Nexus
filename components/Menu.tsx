@@ -70,8 +70,8 @@ export const Menu: React.FC<MenuProps> = ({
 
     return (
       <>
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-20" onClick={onClose}></div>
-        <div className="fixed top-0 left-0 bottom-0 w-80 bg-[var(--modal-bg)] border-r border-[var(--ui-border-color)] shadow-2xl z-30 menu-slide-in transition-colors duration-500 flex flex-col">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30" onClick={onClose}></div>
+        <div className="fixed top-0 left-0 bottom-0 w-80 bg-[var(--modal-bg)] border-r border-[var(--ui-border-color)] shadow-2xl z-50 menu-slide-in transition-colors duration-500 flex flex-col">
             
             <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none z-0">
                 <div className="w-48 h-48">

@@ -5,7 +5,6 @@ import { ChatWindow } from './components/ChatWindow';
 import { Header } from './components/Header';
 import { Home } from './components/Home';
 import { InitialLoading } from './components/InitialLoading';
-import { Intro } from './components/Intro';
 import { Menu } from './components/Menu';
 import { MessageInput } from './components/MessageInput';
 import { AppearanceModal } from './components/AppearanceModal';
@@ -13,7 +12,6 @@ import { VoiceSelectionModal } from './components/VoiceSelectionModal';
 import { ModeSelectionModal } from './components/ModeSelectionModal';
 import { BugReportModal } from './components/BugReportModal';
 import { VoiceInputOverlay } from './components/VoiceInputOverlay';
-import { AgeGatingModal } from './components/AgeGatingModal';
 import { LiveVoiceModeOverlay } from './components/LiveVoiceModeOverlay';
 import { NexusAndChillModal } from './components/NexusAndChillModal';
 import { ForgotPasswordModal } from './components/ForgotPasswordModal';
@@ -24,6 +22,7 @@ import { loginOrSignup, continueAsGuest, getCurrentUser, logout, saveCurrentUser
 import { archiveCurrentSession } from './services/chatHistoryService';
 import { sendMessage } from './services/dialogflowService';
 import { generateSpeech, classifyTextIntent } from './services/geminiService';
+import { getAudioContext } from './services/audioService';
 import {
   getCurrentSession,
   getLiveSystemInstruction,
@@ -34,13 +33,25 @@ import {
   saveTtsVoice,
   saveTextZoom,
   saveTheme,
+  saveLiveSystemInstruction,
 } from './services/persistenceService';
 import { initialSystemInstruction } from './services/persona';
+
 
 import type { Message, User, Attachment } from './types';
 import { Sender } from './types';
 
 import { AudioPlayerProvider } from './contexts/AudioPlayerContext';
+import { AgeGatingModal } from './components/AgeGatingModal';
+import { FieryTransition } from './components/FieryTransition';
+
+// Centralized definition for TTS voices used in the app.
+const ttsVoices = [
+    { id: 'Charon', name: 'Nexus (Default)', previewText: "Okay, let's break this down. First principles. What's the actual goal here?" },
+    { id: 'Fenrir', name: 'Unfiltered', previewText: "Alright, let's cut the shit. What's the real problem we're solving right now?" },
+    { id: 'Puck', name: 'Legacy', previewText: "This is the Nexus. No filter, no bullshit. Just the straight-up truth." },
+    { id: 'Kore', name: 'Vibing', previewText: "Aight, cool. We can just chop it up. No agenda, just real talk. What's on your mind?" },
+];
 
 /**
  * The main application component. Manages all application state, including authentication,
@@ -55,15 +66,14 @@ const App: React.FC = () => {
     const [authStatus, setAuthStatus] = useState<'loading' | 'authenticated' | 'unauthenticated'>('loading');
 
     // UI state: Controls the visibility of major UI components like the intro, home screen, and menus.
-    const [showIntro, setShowIntro] = useState(true);
     const [showHomeScreen, setShowHomeScreen] = useState(true);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [isAgeGated, setIsAgeGated] = useState(localStorage.getItem('darenNexusAgeGate') !== 'true');
+    const [isAgeGated, setIsAgeGated] = useState(false);
     const [isInputFocused, setIsInputFocused] = useState(false);
     
     // Home screen animation state for smooth transitions.
     const [selectedModeForAnimation, setSelectedModeForAnimation] = useState<string | null>(null);
-    const mainContentRef = useRef<HTMLDivElement>(null);
+    const [showFieryTransition, setShowFieryTransition] = useState(false);
     const appContainerRef = useRef<HTMLDivElement>(null);
 
 
@@ -93,18 +103,39 @@ const App: React.FC = () => {
 
     // Settings state: Manages the AI's persona, model, voice, and visual settings.
     const [currentMode, setCurrentMode] = useState('Vibing');
-    const [currentAiModel, setCurrentAiModel] = useState('gemini-2.5-pro'); // Default model set to Pro
-    const [ttsVoice, setTtsVoice] = useState('Fenrir');
+    const [currentAiModel, setCurrentAiModel] = useState('gemini-2.5-flash');
+    const [ttsVoice, setTtsVoice] = useState('Charon');
     const [textZoom, setTextZoom] = useState(100);
     const [theme, setTheme] = useState('theme-default');
     const [liveSystemInstruction, setLiveSystemInstruction] = useState(initialSystemInstruction);
 
+    // Caching state: Holds pre-generated audio for voice previews.
+    const voicePreviewCache = useRef(new Map<string, AudioBuffer>());
+    
     // --- Effects ---
     
     const prevThemeRef = useRef(theme);
+
+    /**
+     * On initial load, check for an authenticated user.
+     */
+    useEffect(() => {
+        try {
+            const user = getCurrentUser();
+            if (user) {
+                setCurrentUser(user);
+                setAuthStatus('authenticated');
+            } else {
+                setAuthStatus('unauthenticated');
+            }
+        } catch (error) {
+            console.error("Auth initialization failed:", error);
+            setAuthStatus('unauthenticated'); // Fallback to login screen
+        }
+    }, []);
     
     // Accessibility: Determine if any modal is open to hide background content.
-    const isModalOpen = isHistoryOpen || isAppearanceOpen || isVoiceSelectionOpen || isModeSelectionOpen || isBugModalOpen || isVoiceInputOpen || isLiveVoiceOpen || isNexusAndChillOpen || isForgotPasswordOpen || isProfileModalOpen || isMemoryVaultOpen;
+    const isModalOpen = isMenuOpen || isHistoryOpen || isAppearanceOpen || isVoiceSelectionOpen || isModeSelectionOpen || isBugModalOpen || isVoiceInputOpen || isLiveVoiceOpen || isNexusAndChillOpen || isForgotPasswordOpen || isProfileModalOpen || isMemoryVaultOpen;
 
     /**
      * ACCESSIBILITY: Hides the main app content from screen readers and keyboard
@@ -112,8 +143,9 @@ const App: React.FC = () => {
      */
     useEffect(() => {
         const appContainer = appContainerRef.current;
+
         if (appContainer) {
-            if (isModalOpen) {
+            if (isModalOpen || isAgeGated) {
                 appContainer.setAttribute('aria-hidden', 'true');
                 appContainer.setAttribute('inert', '');
             } else {
@@ -121,7 +153,7 @@ const App: React.FC = () => {
                 appContainer.removeAttribute('inert');
             }
         }
-    }, [isModalOpen]);
+    }, [isModalOpen, isAgeGated]);
 
 
     /**
@@ -140,7 +172,7 @@ const App: React.FC = () => {
         if (!showHomeScreen) {
             bodyClassList.add('in-chat');
         } else {
-            bodyClassList.remove('in--chat');
+            bodyClassList.remove('in-chat');
         }
     }, [theme, showHomeScreen]);
     
@@ -183,19 +215,6 @@ const App: React.FC = () => {
         }
     }, [authStatus]);
 
-    /**
-     * Checks for a current user session on initial application load.
-     * Sets the authentication status accordingly.
-     */
-    useEffect(() => {
-        const user = getCurrentUser();
-        if (user) {
-            setCurrentUser(user);
-            setAuthStatus('authenticated');
-        } else {
-            setAuthStatus('unauthenticated');
-        }
-    }, []);
 
     /**
      * Loads all user-specific data from persistence when a user is authenticated.
@@ -226,7 +245,7 @@ const App: React.FC = () => {
                     setShowHomeScreen(true);
                 }
                 setLiveSystemInstruction(storedInstruction ?? initialSystemInstruction);
-                setTtsVoice(storedVoice ?? 'Fenrir');
+                setTtsVoice(storedVoice ?? 'Charon');
                 setTextZoom(storedZoom ?? 100);
                 setTheme(storedTheme ?? 'theme-default');
             };
@@ -242,13 +261,44 @@ const App: React.FC = () => {
             saveCurrentSession(currentUser.hash, messages);
         }
     }, [messages, currentUser]);
+    
+    /**
+     * Pre-warms the voice preview cache when the selection modal is opened
+     * to ensure instantaneous playback for the user.
+     */
+    useEffect(() => {
+        if (isVoiceSelectionOpen) {
+            const prewarmVoice = async (voice: string, text: string) => {
+                try {
+                    const audioContext = getAudioContext();
+                    const buffer = await generateSpeech(text, audioContext, voice);
+                    if (buffer) {
+                        voicePreviewCache.current.set(voice, buffer);
+                    }
+                } catch (error) {
+                    console.error(`Failed to pre-warm voice preview for ${voice}:`, error);
+                }
+            };
+            
+            ttsVoices.forEach(voice => {
+                if (!voicePreviewCache.current.has(voice.id)) {
+                    prewarmVoice(voice.id, voice.previewText);
+                }
+            });
+        }
+    }, [isVoiceSelectionOpen]);
 
     // --- Handlers ---
 
     const handleLogin = async (email: string, password: string, rememberMe: boolean) => {
-        const user = loginOrSignup(email, password, rememberMe);
-        setCurrentUser(user);
-        setAuthStatus('authenticated');
+        try {
+            const user = loginOrSignup(email, password, rememberMe);
+            setCurrentUser(user);
+            setAuthStatus('authenticated');
+        } catch (error) {
+            console.error("Login/Signup failed:", error);
+            throw error;
+        }
     };
 
     const handleGuest = async () => {
@@ -256,252 +306,141 @@ const App: React.FC = () => {
         setCurrentUser(user);
         setAuthStatus('authenticated');
     };
-    
-    const handleGoToAuth = () => {
-        setIsMenuOpen(false);
-        setIsHistoryOpen(false); // Close any open modals
-        // Delay auth change to allow modals to close gracefully
-        setTimeout(() => {
-          logout(); // This clears hashes from storage
-          setCurrentUser(null);
-          setMessages([]);
-          setAuthStatus('unauthenticated');
-        }, 300);
-    };
 
     const handleLogout = () => {
-        logout();
-        setCurrentUser(null);
-        setMessages([]);
-        setAuthStatus('unauthenticated');
-    };
-
-    const handleAgeGateAgree = () => {
-        localStorage.setItem('darenNexusAgeGate', 'true');
-        setIsAgeGated(false);
-    };
-
-    /**
-     * Archives the current chat session (if it has content) and starts a new one.
-     */
-    const handleNewChat = async () => {
-        if (!currentUser) return;
-        if (messages.length > 0) {
-            await archiveCurrentSession(currentUser.hash);
+        if (currentUser) {
+            archiveCurrentSession(currentUser.hash).then(() => {
+                logout();
+                setCurrentUser(null);
+                setMessages([]);
+                setShowHomeScreen(true);
+                setAuthStatus('unauthenticated');
+            });
         }
-        setMessages([]);
-        setShowHomeScreen(true);
-        setIsMenuOpen(false);
     };
 
+    const handleNewChat = () => {
+        if (currentUser) {
+            archiveCurrentSession(currentUser.hash).then(() => {
+                setMessages([]);
+                setShowHomeScreen(true);
+            });
+        }
+    };
+    
     const handleSelectSession = (sessionMessages: Message[]) => {
         setMessages(sessionMessages);
         setShowHomeScreen(false);
         setIsHistoryOpen(false);
     };
-    
-    /**
-     * Aborts the in-flight API request for generating an AI response.
-     */
+
     const handleCancelGeneration = () => {
         if (abortControllerRef.current) {
-          abortControllerRef.current.abort();
+            abortControllerRef.current.abort();
+            setIsLoading(false);
+            setIsExtraThinking(false);
         }
     };
     
-    /**
-     * The core function for sending a message. It handles trigger phrases,
-     * sends the message to the backend, and processes the AI's response,
-     * including initiating background text-to-speech generation.
-     */
+    const handleSelectAiModel = (model: string) => {
+        setCurrentAiModel(model);
+    };
+    
+    const handleTts = useCallback(async (messageId: string, text: string) => {
+        if (!text.trim() || !currentUser) return;
+        setTtsLoadingMessageId(messageId);
+        try {
+            const audioContext = getAudioContext();
+            const buffer = await generateSpeech(text, audioContext, ttsVoice);
+            setMessages(prev => prev.map(msg => msg.id === messageId ? { ...msg, audioBuffer: buffer } : msg));
+        } catch (error) {
+            console.error("TTS generation failed:", error);
+        } finally {
+            setTtsLoadingMessageId(null);
+        }
+    }, [currentUser, ttsVoice]);
+
     const handleSendMessage = useCallback(async (messageText: string) => {
-        if (isLoading || (!messageText.trim() && attachments.length === 0)) return;
-        if (!currentUser) return;
-    
-        // --- Trigger Phrase Checks for special client-side actions ---
-        const lowerCaseText = messageText.trim().toLowerCase();
-        if (lowerCaseText === 'nexus who') {
-            window.open('/nexus-who.html', '_blank');
+        const finalMessage = messageText.trim();
+        if ((!finalMessage && attachments.length === 0) || !currentUser) {
             return;
         }
-        if (['can i come over', 'nexus and chill', 'nexus & chill'].includes(lowerCaseText)) {
-            setIsNexusAndChillOpen(true);
-            return;
-        }
-    
+
         setIsLoading(true);
-        if (['Deep Dive', 'Mentor Mode'].includes(currentMode)) {
-            setIsExtraThinking(true);
+        if (showHomeScreen) {
+            setShowHomeScreen(false);
         }
-
-        setShowHomeScreen(false);
-        setInput('');
-
-        abortControllerRef.current = new AbortController();
-    
-        const userMessageAttachments: Attachment[] = attachments.map(a => ({
-            type: 'image',
-            base64: a.base64,
-            mimeType: a.file.type,
-        }));
-    
-        const userMessage: Message = {
-            id: Date.now().toString(),
-            text: messageText,
+        
+        // Optimistically add user message to the UI
+        const attachmentData: Attachment[] = attachments.map(a => ({ type: 'image', base64: a.base64, mimeType: a.file.type }));
+        const newUserMessage: Message = {
+            id: crypto.randomUUID(), // Use crypto.randomUUID for unique IDs
+            text: finalMessage,
             sender: Sender.User,
             timestamp: new Date().toISOString(),
-            attachments: userMessageAttachments,
+            attachments: attachmentData,
         };
-        
-        // History for the API call does NOT include the new user message.
-        const historyForApi = [...messages];
-        // Messages to add to the UI state.
-        const newUiMessages: Message[] = [userMessage];
-
-        const currentAttachments = [...attachments];
+        setMessages(prev => [...prev, newUserMessage]);
+        setInput('');
         setAttachments([]);
         
-        // Handle intent classification and add UI-only transition message if needed
-        const intent = await classifyTextIntent(messageText);
-        if (intent === 'sexual' && theme !== 'theme-crimson') {
-            handleThemeChange('theme-crimson');
-            const transitionMessage: Message = {
-                id: (Date.now() + 0.5).toString(),
-                text: "mmm okk... shit! It's getting HOT in this mofo. 🔥😈💦",
-                sender: Sender.AI,
-                timestamp: new Date().toISOString()
-            };
-            newUiMessages.push(transitionMessage);
+        // Prepare for API call
+        abortControllerRef.current = new AbortController();
+        const history = messages; // Pass history BEFORE the new message
+
+        // "Extra Thinking" logic
+        if (['Deep Dive', 'Mentor Mode'].includes(currentMode)) {
+            const thinkingTimer = setTimeout(() => setIsExtraThinking(true), 2500);
         }
 
-        // Update UI state once with all new messages for this turn.
-        setMessages(prev => [...prev, ...newUiMessages]);
-
         try {
-            // Send the clean history and the new message text to the backend.
             const response = await sendMessage(
-                messageText,
+                finalMessage,
                 currentMode,
-                historyForApi, // Clean history
-                currentUser ?? undefined,
+                history,
+                currentUser,
                 currentAiModel,
-                currentAttachments,
-                null, // quotedMessage
-                {}, // options
+                attachments,
+                null,
+                {},
                 abortControllerRef.current.signal
             );
-    
-            const aiResponseText = response.text;
-            const groundingMetadata = response.groundingMetadata;
-
-            const aiMessageId = (Date.now() + 1).toString();
+            
             const aiMessage: Message = {
-                id: aiMessageId,
-                text: aiResponseText,
+                id: crypto.randomUUID(), // Use crypto.randomUUID for unique IDs
+                text: response.text,
                 sender: Sender.AI,
                 timestamp: new Date().toISOString(),
-                groundingMetadata: groundingMetadata,
+                groundingMetadata: response.groundingMetadata,
             };
-    
-            // Add the text message first to provide a fast response to the user.
+            
             setMessages(prev => [...prev, aiMessage]);
-    
-            // Now, generate speech in the background and update the message with the audio buffer.
-            try {
-                setTtsLoadingMessageId(aiMessageId);
-                const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-                const audioBuffer = await generateSpeech(aiResponseText, audioContext, ttsVoice);
-                
-                setMessages(prev => prev.map(msg => 
-                    msg.id === aiMessageId ? { ...msg, audioBuffer } : msg
-                ));
-            } catch (speechError) {
-                console.error("Error generating speech after response:", speechError);
-            } finally {
-                setTtsLoadingMessageId(null);
-            }
-    
-        } catch (error: any) {
-            if (error.name === 'AbortError') {
-                console.log('Message generation cancelled by user.');
-                // Revert the UI state by removing the messages we just added.
-                setMessages(historyForApi); 
-                setIsLoading(false);
-                setIsExtraThinking(false);
-                return;
+
+            const intent = await classifyTextIntent(response.text);
+            if (!['violent', 'sexual'].includes(intent)) {
+                handleTts(aiMessage.id, response.text);
             }
 
-            console.error("Error sending message:", error);
-            const errorMessage: Message = {
-                id: (Date.now() + 1).toString(),
-                text: error.message || "Sorry, I ran into an error. Please try again.",
-                sender: Sender.AI,
-                timestamp: new Date().toISOString(),
-            };
-            setMessages(prev => [...prev, errorMessage]);
+        } catch (error: any) {
+            if (error.name !== 'AbortError') {
+                console.error("Failed to send message:", error);
+                const errorMessage: Message = {
+                    id: crypto.randomUUID(), // Use crypto.randomUUID for unique IDs
+                    text: `Error: ${error.message || 'Could not get a response.'}`,
+                    sender: Sender.AI,
+                    timestamp: new Date().toISOString(),
+                };
+                setMessages(prev => [...prev, errorMessage]);
+            }
         } finally {
             setIsLoading(false);
             setIsExtraThinking(false);
-            abortControllerRef.current = null;
         }
-    }, [isLoading, attachments, currentUser, currentMode, messages, liveSystemInstruction, currentAiModel, ttsVoice, theme]);
+    }, [attachments, currentUser, showHomeScreen, messages, currentMode, currentAiModel, handleTts]);
 
-    /**
-     * Handles the selection of a new "vibe" from the home screen,
-     * triggering a transition animation before switching to the chat view.
-     */
-    const handleSelectMode = (mode: string) => {
-        setSelectedModeForAnimation(mode);
-        setTimeout(() => {
-            setCurrentMode(mode);
-            setShowHomeScreen(false);
-            setSelectedModeForAnimation(null);
-        }, 2000); // 2-second delay allows the user to see the selection animation.
-    };
-    
-    const handleAnimationComplete = useCallback(() => {
-      mainContentRef.current?.scrollTo({
-        top: mainContentRef.current.scrollHeight,
-        behavior: 'smooth',
-      });
-    }, []);
-
-    const handleThemeChange = (newTheme: string) => {
-        setTheme(newTheme);
-        if (currentUser) saveTheme(currentUser.hash, newTheme);
-    };
-
-    const handleTextZoomChange = (zoom: number) => {
-        setTextZoom(zoom);
-        if (currentUser) saveTextZoom(currentUser.hash, zoom);
-    };
-    
-    const handleVoiceChange = (voice: string) => {
-        setTtsVoice(voice);
-        if (currentUser) saveTtsVoice(currentUser.hash, voice);
-    };
-
-    /**
-     * Generates and plays a preview of a TTS voice.
-     */
-    const handlePreviewTtsVoice = async (voice: string, text: string) => {
-        setIsVoicePreviewLoading(voice);
-        try {
-            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-            const buffer = await generateSpeech(text, audioContext, voice);
-            return buffer;
-        } catch (error) {
-            console.error("Error previewing voice:", error);
-        } finally {
-            setIsVoicePreviewLoading(null);
-        }
-    };
-    
-    const fileInputRef = React.useRef<HTMLInputElement>(null);
-
-    const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (file && file.type.startsWith('image/')) {
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
             const reader = new FileReader();
             reader.onload = (loadEvent) => {
                 const base64 = (loadEvent.target?.result as string).split(',')[1];
@@ -509,24 +448,77 @@ const App: React.FC = () => {
             };
             reader.readAsDataURL(file);
         }
-        if (fileInputRef.current) fileInputRef.current.value = '';
     };
     
-    const handleRemoveAttachment = (indexToRemove: number) => {
-        setAttachments(prev => prev.filter((_, index) => index !== indexToRemove));
-    };
+    const handleAddLiveMessages = useCallback((liveMessages: Message[]) => {
+        const messagesWithUniqueIds = liveMessages.map(msg => ({
+            ...msg,
+            id: crypto.randomUUID(), // Ensure unique IDs
+        }));
+        setMessages(prev => [...prev, ...messagesWithUniqueIds]);
+    }, []);
 
-    const handleSaveProfile = async (newName: string) => {
-        if (currentUser && !currentUser.isGuest) {
-            const updatedUser = await saveCurrentUserName(currentUser.hash, newName);
-            if (updatedUser) {
-                setCurrentUser(updatedUser);
-            }
-            setIsProfileModalOpen(false);
+    const handleSelectMode = (mode: string) => {
+        setCurrentMode(mode);
+        if (showHomeScreen) {
+            setSelectedModeForAnimation(mode);
+            setShowFieryTransition(true);
         }
     };
 
-    // --- Render Logic ---
+    const handleFieryTransitionComplete = () => {
+        setShowFieryTransition(false);
+        setShowHomeScreen(false);
+    };
+
+    // --- Settings Handlers ---
+    const handleTextZoomChange = (zoom: number) => {
+        setTextZoom(zoom);
+        if (currentUser) saveTextZoom(currentUser.hash, zoom);
+    };
+    const handleThemeChange = (newTheme: string) => {
+        setTheme(newTheme);
+        if (currentUser) saveTheme(currentUser.hash, newTheme);
+    };
+    const handleTtsVoiceChange = (voice: string) => {
+        setTtsVoice(voice);
+        if (currentUser) saveTtsVoice(currentUser.hash, voice);
+    };
+     const handleSaveSystemInstruction = (instruction: string) => {
+        setLiveSystemInstruction(instruction);
+        if (currentUser) saveLiveSystemInstruction(currentUser.hash, instruction);
+    };
+    
+    const handleSaveProfile = async (name: string) => {
+        if (currentUser) {
+            const updatedUser = await saveCurrentUserName(currentUser.hash, name);
+            if (updatedUser) {
+                setCurrentUser(updatedUser);
+            }
+        }
+        setIsProfileModalOpen(false);
+    };
+
+    const handlePreviewTtsVoice = async (voice: string, text: string) => {
+        if (voicePreviewCache.current.has(voice)) {
+            return voicePreviewCache.current.get(voice);
+        }
+        setIsVoicePreviewLoading(voice);
+        try {
+            const audioContext = getAudioContext();
+            const buffer = await generateSpeech(text, audioContext, voice);
+            if (buffer) {
+                voicePreviewCache.current.set(voice, buffer);
+            }
+            return buffer;
+        } catch (error) {
+            console.error(`Failed to generate preview for ${voice}:`, error);
+        } finally {
+            setIsVoicePreviewLoading(null);
+        }
+    };
+
+    // --- Component Rendering Logic ---
 
     if (authStatus === 'loading') {
         return <InitialLoading />;
@@ -534,95 +526,117 @@ const App: React.FC = () => {
 
     if (authStatus === 'unauthenticated') {
         return (
-            <>
-                <div className="w-full min-h-full flex items-center justify-center animate-auth-emerge opacity-0">
+             <div className="h-full flex flex-col">
+                <div ref={appContainerRef} className="flex-1 flex flex-col">
                     <AuthScreen onLogin={handleLogin} onGuest={handleGuest} onForgotPassword={() => setIsForgotPasswordOpen(true)} />
                 </div>
                 <ForgotPasswordModal isOpen={isForgotPasswordOpen} onClose={() => setIsForgotPasswordOpen(false)} />
-            </>
+             </div>
         );
     }
     
-    if (!currentUser) {
-       return <div className="w-full min-h-full flex items-center justify-center"><p>Error: No user found.</p></div>;
-    }
-
-    if (showIntro) {
-        return <Intro onIntroComplete={() => setShowIntro(false)} />;
-    }
-
     if (isAgeGated) {
-        return <AgeGatingModal onAgree={handleAgeGateAgree} />;
+        return <AgeGatingModal onAgree={() => setIsAgeGated(false)} />;
     }
-
+    
     return (
-      <AudioPlayerProvider>
-        <div ref={appContainerRef} className={`w-full h-full flex flex-col font-sans transition-colors duration-500 global-edge-glow`}>
-            <Header
-                onToggleMenu={() => setIsMenuOpen(!isMenuOpen)}
-                onNewChat={handleNewChat}
-                showHomeScreen={showHomeScreen}
-                onGoHome={() => setShowHomeScreen(true)}
-                onOpenBugModal={() => setIsBugModalOpen(true)}
-                currentMode={currentMode}
-                onModeChange={setCurrentMode}
-            />
+        <AudioPlayerProvider>
+            <div 
+                className="h-full flex flex-col bg-black relative overflow-hidden"
+            >
+                <div className="flex-1 flex flex-col min-h-0 relative">
+                    <div ref={appContainerRef} className="flex-1 flex flex-col min-h-0 relative">
+                        <div className="z-40">
+                            <Header 
+                                onToggleMenu={() => setIsMenuOpen(!isMenuOpen)}
+                                onNewChat={handleNewChat}
+                                showHomeScreen={showHomeScreen}
+                                onGoHome={() => setShowHomeScreen(true)}
+                                onOpenBugModal={() => setIsBugModalOpen(true)}
+                                currentMode={currentMode}
+                                onModeChange={setCurrentMode}
+                            />
+                        </div>
+                        {/* Main Content Wrapper */}
+                        <div className="flex-1 flex flex-col overflow-hidden">
+                            <main className="flex-1 flex flex-col overflow-y-auto smooth-scroll">
+                        {showHomeScreen ? (
+                            <Home 
+                                onSelectMode={handleSelectMode}
+                                onAnimationComplete={() => {}}
+                                currentMode={currentMode}
+                                selectedModeForAnimation={selectedModeForAnimation}
+                            />
+                        ) : (
+                            <ChatWindow 
+                                messages={messages} 
+                                isLoading={isLoading} 
+                                isExtraThinking={isExtraThinking}
+                                onCancelGeneration={handleCancelGeneration}
+                                textZoom={textZoom}
+                                ttsLoadingMessageId={ttsLoadingMessageId}
+                            />
+                        )}
+                    </main>
+                    {!showHomeScreen && (
+                        <MessageInput 
+                            input={input} 
+                            setInput={setInput} 
+                            onSendMessage={handleSendMessage}
+                            isLoading={isLoading}
+                            isListening={isVoiceInputOpen}
+                            onToggleListening={() => setIsVoiceInputOpen(!isVoiceInputOpen)}
+                            onToggleLiveVoiceMode={() => setIsLiveVoiceOpen(true)}
+                            attachments={attachments}
+                            onFileSelect={handleFileSelect}
+                            onRemoveAttachment={(index) => setAttachments(prev => prev.filter((_, i) => i !== index))}
+                            setIsInputFocused={setIsInputFocused}
+                        />
+                    )}
+                </div>
+            </div>
 
-            <Menu
-                isOpen={isMenuOpen}
-                onClose={() => setIsMenuOpen(false)}
-                onLogout={handleLogout}
-                onViewHistory={() => { setIsHistoryOpen(true); setIsMenuOpen(false); }}
-                currentAiModel={currentAiModel}
-                onSelectAiModel={setCurrentAiModel}
-                onOpenAppearance={() => { setIsAppearanceOpen(true); setIsMenuOpen(false); }}
-                onOpenVoiceSelection={() => { setIsVoiceSelectionOpen(true); setIsMenuOpen(false); }}
-                onOpenModeSelection={() => { setIsModeSelectionOpen(true); setIsMenuOpen(false); }}
-                currentUser={currentUser}
-                onGoToAuth={handleGoToAuth}
-                onOpenProfileModal={() => { setIsProfileModalOpen(true); setIsMenuOpen(false); }}
-                onOpenMemoryVault={() => { setIsMemoryVaultOpen(true); setIsMenuOpen(false); }}
-            />
-            
-            <main ref={mainContentRef} className={`flex-1 flex flex-col overflow-y-auto min-h-0 smooth-scroll`}>
-                {showHomeScreen ? (
-                    <Home onSelectMode={handleSelectMode} onAnimationComplete={handleAnimationComplete} currentMode={currentMode} selectedModeForAnimation={selectedModeForAnimation} />
-                ) : (
-                    <ChatWindow messages={messages} isLoading={isLoading} isExtraThinking={isExtraThinking} onCancelGeneration={handleCancelGeneration} textZoom={textZoom} ttsLoadingMessageId={ttsLoadingMessageId} />
+                {/* Modals and Overlays - These stay active even when main content is inert */}
+                {currentUser && (
+                    <Menu
+                        isOpen={isMenuOpen}
+                        onClose={() => setIsMenuOpen(false)}
+                        onLogout={handleLogout}
+                        onViewHistory={() => setIsHistoryOpen(true)}
+                        currentAiModel={currentAiModel}
+                        onSelectAiModel={handleSelectAiModel}
+                        onOpenAppearance={() => setIsAppearanceOpen(true)}
+                        onOpenVoiceSelection={() => setIsVoiceSelectionOpen(true)}
+                        onOpenModeSelection={() => setIsModeSelectionOpen(true)}
+                        currentUser={currentUser}
+                        onGoToAuth={handleLogout}
+                        onOpenProfileModal={() => setIsProfileModalOpen(true)}
+                        onOpenMemoryVault={() => setIsMemoryVaultOpen(true)}
+                    />
                 )}
-            </main>
-
-            {!showHomeScreen && (
-                <MessageInput
-                    input={input}
-                    setInput={setInput}
-                    onSendMessage={handleSendMessage}
-                    isLoading={isLoading}
-                    isListening={isVoiceInputOpen}
-                    onToggleListening={() => setIsVoiceInputOpen(!isVoiceInputOpen)}
-                    onToggleLiveVoiceMode={() => setIsLiveVoiceOpen(true)}
-                    attachments={attachments}
-                    onFileSelect={handleFileSelect}
-                    onRemoveAttachment={handleRemoveAttachment}
-                    setIsInputFocused={setIsInputFocused}
+                {currentUser && <ChatHistory isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} onSelectSession={handleSelectSession} currentUser={currentUser} onSignUp={handleLogout} />}
+                <AppearanceModal isOpen={isAppearanceOpen} onClose={() => setIsAppearanceOpen(false)} textZoom={textZoom} onTextZoomChange={handleTextZoomChange} currentTheme={theme} onThemeChange={handleThemeChange} />
+                <VoiceSelectionModal 
+                    isOpen={isVoiceSelectionOpen} 
+                    onClose={() => setIsVoiceSelectionOpen(false)} 
+                    currentTtsVoice={ttsVoice} 
+                    onSelectTtsVoice={handleTtsVoiceChange} 
+                    onPreviewTtsVoice={handlePreviewTtsVoice}
+                    isVoicePreviewLoading={isVoicePreviewLoading}
+                    ttsVoices={ttsVoices}
                 />
-            )}
-        </div>
-
-        {/* Modals are rendered outside the main app container for accessibility */}
-        {currentUser && <ChatHistory isOpen={isHistoryOpen} onClose={() => setIsHistoryOpen(false)} onSelectSession={handleSelectSession} currentUser={currentUser} onSignUp={handleGoToAuth} />}
-        <AppearanceModal isOpen={isAppearanceOpen} onClose={() => setIsAppearanceOpen(false)} textZoom={textZoom} onTextZoomChange={handleTextZoomChange} currentTheme={theme} onThemeChange={handleThemeChange} />
-        <VoiceSelectionModal isOpen={isVoiceSelectionOpen} onClose={() => setIsVoiceSelectionOpen(false)} currentTtsVoice={ttsVoice} onSelectTtsVoice={handleVoiceChange} onPreviewTtsVoice={handlePreviewTtsVoice} isVoicePreviewLoading={isVoicePreviewLoading} />
-        <ModeSelectionModal isOpen={isModeSelectionOpen} onClose={() => setIsModeSelectionOpen(false)} onSelectMode={handleSelectMode} currentMode={currentMode} />
-        <BugReportModal isOpen={isBugModalOpen} onClose={() => setIsBugModalOpen(false)} />
-        <ProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} currentUser={currentUser} onSave={handleSaveProfile} />
-        {currentUser && <MemoryVaultModal isOpen={isMemoryVaultOpen} onClose={() => setIsMemoryVaultOpen(false)} currentUser={currentUser} />}
-        {isVoiceInputOpen && <VoiceInputOverlay onClose={() => setIsVoiceInputOpen(false)} onSend={handleSendMessage} />}
-        {isLiveVoiceOpen && <LiveVoiceModeOverlay onClose={() => setIsLiveVoiceOpen(false)} onAddLiveMessages={(msgs) => setMessages(prev => [...prev, ...msgs])} systemInstruction={liveSystemInstruction} />}
-        {currentUser && <NexusAndChillModal isOpen={isNexusAndChillOpen} onClose={() => setIsNexusAndChillOpen(false)} currentUser={currentUser} />}
-        <ForgotPasswordModal isOpen={isForgotPasswordOpen} onClose={() => setIsForgotPasswordOpen(false)} />
-      </AudioPlayerProvider>
+                <ModeSelectionModal isOpen={isModeSelectionOpen} onClose={() => setIsModeSelectionOpen(false)} onSelectMode={setCurrentMode} currentMode={currentMode} />
+                <BugReportModal isOpen={isBugModalOpen} onClose={() => setIsBugModalOpen(false)} />
+                {isVoiceInputOpen && <VoiceInputOverlay onClose={() => setIsVoiceInputOpen(false)} onSend={handleSendMessage} />}
+                {isLiveVoiceOpen && <LiveVoiceModeOverlay onClose={() => setIsLiveVoiceOpen(false)} onAddLiveMessages={handleAddLiveMessages} systemInstruction={liveSystemInstruction} />}
+                {currentUser && <NexusAndChillModal isOpen={isNexusAndChillOpen} onClose={() => setIsNexusAndChillOpen(false)} currentUser={currentUser} />}
+                {currentUser && <ProfileModal isOpen={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)} currentUser={currentUser} onSave={handleSaveProfile} />}
+                {currentUser && <MemoryVaultModal isOpen={isMemoryVaultOpen} onClose={() => setIsMemoryVaultOpen(false)} currentUser={currentUser} />}
+                <FieryTransition isActive={showFieryTransition} onComplete={handleFieryTransitionComplete} />
+                <div className="global-edge-glow"></div>
+            </div>
+        </AudioPlayerProvider>
     );
-}
+};
 
 export default App;

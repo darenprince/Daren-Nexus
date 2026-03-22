@@ -1,9 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
-// FIX: Update import for `QRCode` component from `qrcode.react` to use a named import (`QRCodeSVG`) to resolve JSX component type error. The component is aliased to `QRCode` to avoid changing its usage in the code.
 import { QRCodeSVG as QRCode } from 'qrcode.react';
-
-const NEXUS_WHO_ATTEMPT_KEY = 'darenNexusWhoAttempt';
+import { AuditReportModal } from './components/AuditReportModal';
 
 // --- Questions ---
 const questions = [
@@ -41,7 +39,7 @@ const questions = [
 const likertOptions = ['Strongly Disagree', 'Disagree', 'Agree', 'Strongly Agree'];
 const likertScores = [0, 1, 2, 3];
 
-type Step = 'checking' | 'intro' | 'questions' | 'result' | 'alreadyUsed' | 'declined';
+type Step = 'checking' | 'intro' | 'questions' | 'result' | 'declined';
 type Answers = { [key: string]: { value: number; latency: number } };
 type Result = {
   band: 'GREEN' | 'YELLOW' | 'RED';
@@ -58,20 +56,15 @@ const NexusWhoTest: React.FC = () => {
     const [result, setResult] = useState<Result | null>(null);
     const [startTime, setStartTime] = useState(0);
     const [shuffledQuestions, setShuffledQuestions] = useState(questions);
+    const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
 
     useEffect(() => {
-        const hasAttempted = localStorage.getItem(NEXUS_WHO_ATTEMPT_KEY);
-        if (hasAttempted) {
-            setStep('alreadyUsed');
-        } else {
-            setStep('intro');
-            // Shuffle questions once on load
-            setShuffledQuestions(q => [...q].sort(() => Math.random() - 0.5));
-        }
+        setStep('intro');
+        // Shuffle questions once on load
+        setShuffledQuestions(q => [...q].sort(() => Math.random() - 0.5));
     }, []);
 
     const handleStart = () => {
-        localStorage.setItem(NEXUS_WHO_ATTEMPT_KEY, 'started');
         setStartTime(Date.now());
         setStep('questions');
     };
@@ -253,23 +246,30 @@ ${safetyRisks.length > 0 ? safetyRisks.join('\n') : 'None'}
                 if (!result) return <p>Calculating...</p>;
                 const bandColor = result.band === 'GREEN' ? 'bg-green-500' : result.band === 'YELLOW' ? 'bg-yellow-500' : 'bg-red-500';
                 const bandText = result.band === 'GREEN' ? 'Pass' : result.band === 'YELLOW' ? 'Caution' : 'Not Recommended';
-                const mailtoLink = `mailto:daren.prince@gmail.com?subject=URGENT: Nexus Who Audit&body=${encodeURIComponent(result.audit)}`;
+                
                 return (
-                    <div className="w-full max-w-md mx-auto text-center bg-black/30 backdrop-blur-lg border border-white/10 rounded-2xl p-8">
-                        <h2 className="text-2xl font-bold mb-4">Nexus Who — Results</h2>
-                        <div className={`w-full h-4 rounded-full mb-4 ${bandColor}`}></div>
-                        <p className="text-xl font-bold mb-6">{bandText}</p>
-                        <p className="text-lg text-gray-300 italic mb-6">"{result.narrative}"</p>
-                        <p className="text-lg font-bold text-orange-400 mb-6">Screenshot this page and send the QR code below to Daren.</p>
-                        <div className="bg-white p-4 rounded-lg inline-block">
-                           <QRCode value={result.qrPayload} size={192} />
+                    <>
+                        <div className="w-full max-w-md mx-auto text-center bg-black/30 backdrop-blur-lg border border-white/10 rounded-2xl p-8">
+                            <h2 className="text-2xl font-bold mb-4">Nexus Who — Results</h2>
+                            <div className={`w-full h-4 rounded-full mb-4 ${bandColor}`}></div>
+                            <p className="text-xl font-bold mb-6">{bandText}</p>
+                            <p className="text-lg text-gray-300 italic mb-6">"{result.narrative}"</p>
+                            <p className="text-lg font-bold text-orange-400 mb-6">Screenshot this page and send the QR code below to Daren.</p>
+                            <div className="bg-white p-4 rounded-lg inline-block">
+                               <QRCode value={result.qrPayload} size={192} />
+                            </div>
+                            <p className="font-mono text-xl tracking-widest mt-4">{result.verificationToken}</p>
+                            <button onClick={() => setIsAuditModalOpen(true)} className="text-xs text-gray-600 mt-4 block mx-auto hover:text-gray-400">
+                                (View Audit Report)
+                            </button>
                         </div>
-                        <p className="font-mono text-xl tracking-widest mt-4">{result.verificationToken}</p>
-                        <a href={mailtoLink} className="text-xs text-gray-600 mt-4 block">(Simulated Audit Email)</a>
-                    </div>
+                        <AuditReportModal 
+                            isOpen={isAuditModalOpen} 
+                            onClose={() => setIsAuditModalOpen(false)} 
+                            auditText={result.audit} 
+                        />
+                    </>
                 );
-            case 'alreadyUsed':
-                return <p className="text-xl text-center text-amber-400">You have already used your single Nexus Who test. No further attempts allowed.</p>;
             case 'declined':
                 return <p className="text-xl text-center text-gray-400">Test canceled. No attempt recorded.</p>;
             default:
